@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getSettings } from '@/lib/db';
+import { getSettings, getRegistrationStatusHelper } from '@/lib/db';
 
 export async function GET() {
   try {
     const settings = getSettings();
+    const windowStatus = getRegistrationStatusHelper();
+
     // Return sanitized public event settings
     return NextResponse.json({
       eventName: settings.event_name,
@@ -19,7 +21,15 @@ export async function GET() {
       registrationFee: settings.registration_fee,
       minTeamSize: settings.min_team_size,
       maxTeamSize: settings.max_team_size,
-      registrationsOpen: settings.registrations_open === 1,
+      registrationsOpen: windowStatus.isOpen,
+      registrationWindowStatus: windowStatus.status,
+      statusMessage: windowStatus.statusMessage,
+      maxStudentCapacity: windowStatus.maxStudentCapacity,
+      totalStudentsRegistered: windowStatus.totalStudentsRegistered,
+      spotsRemaining: windowStatus.spotsRemaining,
+      registrationWindowHours: settings.registration_window_hours || 96,
+      registrationStartTime: settings.registration_start_time || '',
+      registrationEndTime: settings.registration_end_time || '',
       paymentQrUrl: settings.payment_qr_url,
       paymentReceiverName: settings.payment_receiver_name,
       paymentUpiId: settings.payment_upi_id,

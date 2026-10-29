@@ -104,8 +104,55 @@ npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser. The database `data/aiora.db` will initialize and seed default event settings automatically.
 
+- **Total Capacity Limit:** Strictly capped at 500 students in total across all teams (2–4 students per team). Atomic server-side checks and PostgreSQL database triggers prevent race conditions.
+- **Registration Window:** Configurable 96-hour window in `Asia/Kolkata` (IST) time zone. The website remains online after the window closes or capacity is reached, while new registrations are rejected on the server.
+
+---
+
+## 🛠️ Technology Stack
+
+- **Framework:** Next.js 16 (App Router) with React 19 and TypeScript.
+- **Styling:** Tailwind CSS v4 with bespoke Obsidian & Cyan Glassmorphism theme (`#07090e` obsidian navy, `#00f0ff` cyber cyan, `#2563eb` electric blue, `#8b5cf6` violet).
+- **Icons:** Lucide Icons.
+- **Database:**
+  - **Local/Self-Hosted:** `better-sqlite3` persisting to `data/aiora.db` with ACID transactions, atomic schema initialization, and foreign keys enabled.
+  - **Cloud/Supabase:** Complete PostgreSQL schema migration with Row Level Security (RLS) located at `supabase/migrations/20261105000000_aiora_initial_schema.sql`, featuring a trigger `check_student_capacity_limit()` that enforces the 500-student cap directly inside PostgreSQL.
+- **Assets:** Official AIORA Forum circle logo and official PhonePe QR code (`public/assets/`).
+
+---
+
+## 🔑 Default Administrator Credentials
+
+To access the admin portal:
+- **URL:** `http://localhost:3000/admin/login` (or `/admin/login` on your deployed domain)
+- **Username:** `admin`
+- **Password:** `AioraOrganizers@2026`
+
+*(You can change this password at `/admin/settings` or configure additional administrators in the database or via environment variables).*
+
+---
+
+## ⚙️ Quick Start (Local Development)
+
+### 1. Install Dependencies
+```bash
+npm install
+```
+
+### 2. Environment Configuration
+Copy `.env.example` to `.env.local`:
+```bash
+cp .env.example .env.local
+```
+
+### 3. Run the Development Server
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser. The database `data/aiora.db` will initialize and seed default event settings automatically.
+
 ### 4. Run Acceptance Tests
-A comprehensive test suite of 38 assertions validating the registration pipeline, team-size constraints, payment approval, attendance check-in, CSV exports, and database stats is included:
+A comprehensive test suite of 48 assertions validating the registration pipeline, team-size constraints, payment approval, 96-hour window closure, 500-capacity overflow rejection, attendance check-in, CSV exports, and database stats is included:
 ```bash
 node test_acceptance.mjs
 ```
@@ -118,50 +165,61 @@ npm start
 
 ---
 
-## ☁️ Deployment Instructions
+## 🌐 Complete Step-by-Step Production Deployment Guide
 
-### Option A: Vercel with Supabase PostgreSQL (Recommended for Serverless)
-1. Create a Supabase project at [supabase.com](https://supabase.com).
-2. Run the SQL migration in `supabase/migrations/20261105000000_aiora_initial_schema.sql` inside your Supabase SQL Editor.
-3. In your Vercel Project Settings, add the environment variables:
-   - `NEXT_PUBLIC_SITE_URL`: Your production URL (e.g. `https://aiora.example.com`).
-   - `ADMIN_SESSION_SECRET`: A strong random string for signing admin session tokens.
-4. Deploy the repository to Vercel.
+Follow these steps to deploy the AIORA Hackathon platform to the public internet with a persistent shared database and HTTPS URL.
 
-### Option B: Node.js VM / Docker / VPS (Self-Hosted with SQLite)
-1. Clone the repository onto your server (e.g. Ubuntu EC2, DigitalOcean Droplet, Railway).
-2. Install dependencies: `npm ci`.
-3. Build the application: `npm run build`.
-4. Run using PM2 or Docker:
+### STEP 1: Push Code to GitHub
+1. Create a new repository on GitHub (e.g., `aiora-hackathon`).
+2. Make sure your local repository is committed:
    ```bash
-   pm2 start npm --name "aiora-hackathon" -- start
+   git add .
+   git commit -m "feat: complete production-ready AIORA hackathon platform with 96-hr window and 500 capacity"
    ```
-The persistent SQLite database will be stored safely in `data/aiora.db`.
+3. Set your remote and push:
+   ```bash
+   git branch -M main
+   git remote add origin https://github.com/<YOUR_GITHUB_USERNAME>/aiora-hackathon.git
+   git push -u origin main
+   ```
 
----
+### STEP 2: Set Up Shared Online Database (Supabase PostgreSQL)
+1. Go to [https://supabase.com](https://supabase.com) and create a free account.
+2. Click **New Project** and name it `aiora-hackathon`. Set a strong database password and choose your region (e.g. `ap-south-1` Mumbai / India).
+3. Once the project is created, open the **SQL Editor** in the left sidebar.
+4. Copy the entire contents of `supabase/migrations/20261105000000_aiora_initial_schema.sql` and paste it into the SQL Editor.
+5. Click **Run**. This provisions all tables, indexes, Row-Level Security (RLS) policies, and the `check_student_capacity_limit()` trigger for the 500-student cap.
+6. In Supabase, go to **Project Settings** → **API**. Note down:
+   - **Project URL** (`https://<project-ref>.supabase.co`)
+   - **anon / public key**
+   - **service_role key** (secret key used by the Next.js server)
 
-## 🖼️ Uploading a New Payment QR Code
+### STEP 3: Deploy to Vercel (Public HTTPS Link)
+1. Go to [https://vercel.com](https://vercel.com) and sign in with GitHub.
+2. Click **Add New** → **Project**, and select your `aiora-hackathon` GitHub repository.
+3. In **Environment Variables**, add the following required keys:
+   | Variable Name | Description | Example / Recommended Value |
+   | :--- | :--- | :--- |
+   | `NEXT_PUBLIC_APP_URL` | Your public production domain | `https://aiora.vercel.app` |
+   | `ADMIN_USERNAME` | Administrator login username | `admin` |
+   | `ADMIN_PASSWORD` | Strong production admin password | `SetYourOwnStrongPassword2026!` |
+   | `ADMIN_JWT_SECRET` | 32+ character random secret | `generate_with_openssl_rand_hex_32` |
+   | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL | `https://xxxx.supabase.co` |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY`| Supabase public anon key | `eyJhbGciOi...` |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Supabase server role secret | `eyJhbGciOi...` |
+4. Click **Deploy**. Vercel will build the project and issue a free SSL certificate with a public HTTPS URL (e.g., `https://aiora-hackathon.vercel.app`).
+5. Once deployed, update `NEXT_PUBLIC_APP_URL` in Vercel settings if you attach a custom domain (e.g. `https://aiora.karavali.edu.in`).
 
-Organizers can update the payment QR code anytime without changing any code:
-1. Log in to `/admin/login`.
-2. Go to **Settings** (`/admin/settings`).
-3. Under **Payment QR Code Manager**, click **"Upload New QR Image"** and choose your PNG/JPG file.
-4. The new QR code will instantly appear on the `/register` payment step and payment instructions pages.
-5. To revert to the original organizer PhonePe QR, click **"Reset to Default PhonePe QR"**.
-
----
-
-## 📋 Event Rules Summary (Judging Criteria)
-
-| Criterion | Marks |
-| :--- | :--- |
-| **Innovation & Originality** | 20 marks |
-| **Real-World Usefulness** | 20 marks |
-| **AI Implementation** | 20 marks |
-| **Working Functionality** | 20 marks |
-| **UI/UX & Web Design** | 10 marks |
-| **Code Quality & Explanation** | 10 marks |
-| **Total** | **100 marks** |
+### STEP 4: Configure the 96-Hour Registration Window in Admin Panel
+1. Navigate to `https://your-domain.vercel.app/admin/login`.
+2. Sign in with your admin credentials.
+3. Open **Settings** (`/admin/settings`).
+4. In the **"96-Hour Registration Window & 500-Student Capacity"** section:
+   - Click **"⚡ Start 96-Hour Window Now (IST)"** or set specific opening and closing timestamps.
+   - Verify `Max Student Capacity` is set to `500`.
+   - Toggle Registration Status to **OPEN FOR REGISTRATIONS**.
+   - Click **Save Event Settings**.
+5. Visit the homepage (`/`) and registration page (`/register`) to see the live green badge and remaining spots.
 
 ---
 
@@ -171,4 +229,5 @@ Organizers can update the payment QR code anytime without changing any code:
 - UPI transaction references (UTR) must be unique across the platform.
 - Project submission deadlines are enforced on the server in Asia/Kolkata time.
 - All payment approval/rejection actions are permanently logged in the audit trail table.
+- 500-student capacity limit and 96-hour window are strictly enforced on the server for all incoming registration requests.
 

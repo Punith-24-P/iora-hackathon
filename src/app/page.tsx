@@ -24,10 +24,15 @@ import {
   ExternalLink,
   Lock,
 } from 'lucide-react';
-import { getSettings } from '@/lib/db';
+import { getSettings, getRegistrationStatusHelper } from '@/lib/db';
+import { connection } from 'next/server';
+
+export const instant = false;
 
 export default async function HomePage() {
+  await connection();
   const settings = getSettings();
+  const windowStatus = getRegistrationStatusHelper();
 
   const judgingCriteria = [
     { title: 'Innovation & Originality', marks: 20, desc: 'Novelty of the concept, unique approach to the chosen problem, and creative problem solving.' },
@@ -107,6 +112,39 @@ export default async function HomePage() {
               </div>
             </div>
 
+            {/* Registration Status & 500-Capacity Progress Banner */}
+            <div className="max-w-xl mx-auto p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl backdrop-blur-md space-y-3">
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${windowStatus.isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
+                  <strong className={windowStatus.isOpen ? 'text-emerald-300' : 'text-red-400'}>
+                    {windowStatus.status === 'OPEN' && '96-HOUR REGISTRATION WINDOW OPEN'}
+                    {windowStatus.status === 'UPCOMING' && 'REGISTRATION WINDOW UPCOMING'}
+                    {windowStatus.status === 'FULL' && 'CAPACITY REACHED (500 STUDENTS FULL)'}
+                    {windowStatus.status === 'CLOSED' && 'REGISTRATION WINDOW CLOSED'}
+                  </strong>
+                </span>
+                <span className="text-slate-400 font-semibold">
+                  {windowStatus.spotsRemaining} spots left
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                <div
+                  className="bg-gradient-to-r from-cyan-500 via-sky-400 to-blue-500 h-2.5 rounded-full transition-all duration-500"
+                  style={{
+                    width: `${Math.max(2, Math.min(100, Math.round((windowStatus.totalStudentsRegistered / windowStatus.maxStudentCapacity) * 100)))}%`,
+                  }}
+                />
+              </div>
+
+              <div className="flex justify-between items-center text-[11px] text-slate-400">
+                <span>{windowStatus.totalStudentsRegistered} of {windowStatus.maxStudentCapacity} Students Registered</span>
+                <span className="text-amber-400/90 font-mono">Enforced across all 2–4 member teams</span>
+              </div>
+            </div>
+
             {/* Live Countdown */}
             <div className="pt-2">
               <p className="text-xs font-mono uppercase tracking-widest text-slate-400">
@@ -117,14 +155,29 @@ export default async function HomePage() {
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-              <Link
-                href="/register"
-                className="w-full sm:w-auto px-8 py-4 rounded-xl text-base font-extrabold text-slate-950 bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 transition-all shadow-[0_0_30px_rgba(0,240,255,0.4)] flex items-center justify-center gap-2.5 hover:scale-105 active:scale-95"
-              >
-                <Sparkles className="w-5 h-5" />
-                Register Your Team (₹400)
-                <ArrowRight className="w-5 h-5" />
-              </Link>
+              {windowStatus.isOpen ? (
+                <Link
+                  href="/register"
+                  className="w-full sm:w-auto px-8 py-4 rounded-xl text-base font-extrabold text-slate-950 bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 transition-all shadow-[0_0_30px_rgba(0,240,255,0.4)] flex items-center justify-center gap-2.5 hover:scale-105 active:scale-95"
+                >
+                  <Sparkles className="w-5 h-5" />
+                  Register Your Team (₹400)
+                  <ArrowRight className="w-5 h-5" />
+                </Link>
+              ) : (
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                  <span className="px-6 py-3.5 rounded-xl text-sm font-bold text-red-300 bg-red-950/60 border border-red-800/80 flex items-center justify-center gap-2">
+                    <Lock className="w-4 h-4 text-red-400" />
+                    {windowStatus.status === 'FULL' ? 'Registrations Full (500 Cap)' : 'Registration Window Closed'}
+                  </span>
+                  <Link
+                    href="/check-status"
+                    className="w-full sm:w-auto px-6 py-3.5 rounded-xl text-sm font-semibold text-cyan-300 hover:text-white border border-cyan-500/40 bg-slate-900/80 hover:bg-slate-900 transition flex items-center justify-center gap-2"
+                  >
+                    Check Existing Team Status
+                  </Link>
+                </div>
+              )}
 
               <Link
                 href="/rules"

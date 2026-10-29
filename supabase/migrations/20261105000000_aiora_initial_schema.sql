@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS public.event_settings (
     min_team_size INT NOT NULL DEFAULT 2,
     max_team_size INT NOT NULL DEFAULT 4,
     registrations_open INT NOT NULL DEFAULT 1,
+    max_student_capacity INT NOT NULL DEFAULT 500,
+    registration_window_hours INT NOT NULL DEFAULT 96,
+    registration_start_time TIMESTAMPTZ,
+    registration_end_time TIMESTAMPTZ,
     payment_qr_url TEXT NOT NULL DEFAULT '/assets/phonepe_qr.jpg',
     payment_receiver_name TEXT NOT NULL DEFAULT 'PUNITH K K',
     payment_upi_id TEXT NOT NULL DEFAULT 'PhonePe Accepted Here',
@@ -172,3 +176,29 @@ CREATE POLICY "Service Role All Access Submissions" ON public.project_submission
 
 CREATE POLICY "Service Role All Access Logs" ON public.audit_logs
     FOR ALL USING (auth.role() = 'service_role');
+
+-- 10. Atomic 500-Student Capacity Enforcement Trigger
+CREATE OR REPLACE FUNCTION public.check_student_capacity_limit()
+RETURNS TRIGGER AS $$
+DECLARE
+    current_count INT;
+    max_cap INT;
+BEGIN
+    SELECT COALESCE(max_student_capacity, 500) INTO max_cap FROM public.event_settings WHERE id = 'default';
+    SELECT COUNT(*) INTO current_count FROM public.team_members tm
+    JOIN public.teams t ON tm.team_id = t.id
+    WHERE t.registration_status != 'DISQUALIFIED';
+
+    IF current_count > max_cap THEN
+        RAISE EXCEPTION 'Registration capacity reached: Total students (% / %) exceeds maximum allowed event capacity.', current_count, max_cap;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_check_student_capacity ON public.team_members;
+CREATE TRIGGER trg_check_student_capacity
+AFTER INSERT ON public.team_members
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.check_student_capacity_limit();
+

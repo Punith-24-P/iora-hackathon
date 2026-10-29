@@ -16,6 +16,7 @@ import {
   Lock,
   KeyRound,
   Shield,
+  Clock,
 } from 'lucide-react';
 
 export default function AdminSettingsPage() {
@@ -129,6 +130,35 @@ export default function AdminSettingsPage() {
     } finally {
       setUploadingQr(false);
     }
+  };
+
+  const handleStartWindowNow = (hours: number = 96) => {
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const startIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const endDate = new Date(now.getTime() + hours * 60 * 60 * 1000);
+    const endIso = `${endDate.getFullYear()}-${pad(endDate.getMonth() + 1)}-${pad(endDate.getDate())}T${pad(endDate.getHours())}:${pad(endDate.getMinutes())}`;
+
+    setSettings({
+      ...settings,
+      registration_window_hours: hours,
+      registration_start_time: startIso,
+      registration_end_time: endIso,
+      registrations_open: 1,
+    });
+    setSuccessMessage(`Configured ${hours}-hour registration window starting now until ${endDate.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} (IST). Click Save Changes to commit.`);
+  };
+
+  const handleCloseWindowNow = () => {
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const nowIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    setSettings({
+      ...settings,
+      registration_end_time: nowIso,
+      registrations_open: 0,
+    });
+    setSuccessMessage('Registration closed effective immediately. Click Save Changes to commit.');
   };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
@@ -391,7 +421,141 @@ export default function AdminSettingsPage() {
           </div>
         </section>
 
-        {/* SECTION 3: EVENT DATES & TIMINGS */}
+        {/* SECTION: 96-HOUR REGISTRATION WINDOW & 500-STUDENT CAPACITY ENFORCEMENT */}
+        <section className="p-6 sm:p-8 rounded-3xl glass-panel-glow border border-amber-500/40 space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-3">
+              <Clock className="w-5 h-5 text-amber-400" />
+              <div>
+                <h2 className="text-lg font-bold text-white">96-Hour Registration Window & 500-Student Capacity</h2>
+                <p className="text-xs text-slate-400">
+                  Configured in Asia/Kolkata (IST). Server strictly enforces both the 96-hour window and 500-student cap.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono text-slate-300">Registration Status:</span>
+              <button
+                type="button"
+                onClick={() => handleFieldChange('registrations_open', settings.registrations_open ? 0 : 1)}
+                className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold transition border ${
+                  settings.registrations_open
+                    ? 'bg-emerald-950 border-emerald-500 text-emerald-300'
+                    : 'bg-red-950 border-red-500 text-red-300'
+                }`}
+              >
+                {settings.registrations_open ? 'OPEN FOR REGISTRATIONS' : 'LOCKED / CLOSED'}
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-amber-950/20 border border-amber-500/30 text-xs text-amber-200/90 leading-relaxed flex items-start gap-3">
+            <Shield className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-300">High-Concurrency Server Safeguards Active:</p>
+              <p className="mt-1">
+                The server automatically rejects new submissions when the 500-student cap is reached (sum of all team members) or when the registration window expires. Even when registration closes, the website remains fully accessible to students, teams, and judges for rules, venue info, payment verification, and problem statements.
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Action Presets */}
+          <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+            <span className="text-xs font-mono font-bold text-slate-300">Quick Actions:</span>
+            <button
+              type="button"
+              onClick={() => handleStartWindowNow(96)}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/50 hover:bg-amber-500/30 text-amber-300 font-mono text-xs font-bold transition flex items-center gap-1.5"
+            >
+              <Clock className="w-3.5 h-3.5" /> Start 96-Hour Window Now (IST)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStartWindowNow(48)}
+              className="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 hover:border-slate-600 text-slate-300 font-mono text-xs transition"
+            >
+              Start 48-Hour Window
+            </button>
+            <button
+              type="button"
+              onClick={handleCloseWindowNow}
+              className="px-3 py-1.5 rounded-xl bg-red-950/40 border border-red-700/50 hover:bg-red-950/70 text-red-300 font-mono text-xs transition"
+            >
+              Close Registration Immediately
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">
+                Max Student Capacity (Total)
+              </label>
+              <input
+                type="number"
+                min={2}
+                max={5000}
+                value={settings.max_student_capacity || 500}
+                onChange={(e) => handleFieldChange('max_student_capacity', Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+                required
+              />
+              <span className="text-[10px] text-slate-500 block">
+                Official Hackathon limit: 500 students
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">
+                Configured Window (Hours)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={720}
+                value={settings.registration_window_hours || 96}
+                onChange={(e) => handleFieldChange('registration_window_hours', Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+                required
+              />
+              <span className="text-[10px] text-slate-500 block">
+                Standard: 96 hours window
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">
+                Window Opens At (Asia/Kolkata)
+              </label>
+              <input
+                type="datetime-local"
+                value={settings.registration_start_time ? settings.registration_start_time.slice(0, 16) : ''}
+                onChange={(e) => handleFieldChange('registration_start_time', e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+              />
+              <span className="text-[10px] text-slate-500 block">
+                Format: YYYY-MM-DD HH:MM
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">
+                Window Closes At (Asia/Kolkata)
+              </label>
+              <input
+                type="datetime-local"
+                value={settings.registration_end_time ? settings.registration_end_time.slice(0, 16) : ''}
+                onChange={(e) => handleFieldChange('registration_end_time', e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+              />
+              <span className="text-[10px] text-slate-500 block">
+                Hard server rejection upon expiry
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION 4: EVENT DATES & TIMINGS */}
         <section className="p-6 sm:p-8 rounded-3xl glass-panel border border-slate-800 space-y-6">
           <h2 className="text-lg font-bold text-white pb-3 border-b border-slate-800">
             Event Schedule & Team Constraints

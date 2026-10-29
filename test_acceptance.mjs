@@ -1,7 +1,25 @@
+import Database from 'better-sqlite3';
+
 // Automated Acceptance Tests for AIORA Hackathon Platform
 const BASE_URL = 'http://localhost:3000';
 
 async function runTests() {
+  // Pre-test DB reset to ensure clean event settings state
+  try {
+    const initDb = new Database('data/aiora.db');
+    initDb.prepare(`
+      UPDATE event_settings
+      SET registrations_open = 1,
+          registration_start_time = '',
+          registration_end_time = '2026-11-04T23:59:00',
+          max_student_capacity = 500,
+          registration_window_hours = 96
+      WHERE id = 'default'
+    `).run();
+  } catch (err) {
+    console.warn('Could not reset DB settings directly:', err.message);
+  }
+
   console.log('🚀 Starting Acceptance Test Suite for AIORA Hackathon Platform...\n');
   let passed = 0;
   let failed = 0;
@@ -310,6 +328,106 @@ async function runTests() {
       newPassword: 'AioraOrganizers@2026',
     })
   });
+
+  // 16. Acceptance Test: 96-Hour Registration Window Closure Enforcement on Server
+  console.log('\n16. Testing 96-Hour Window Deadline Server Rejection:');
+  // Set window to expired
+  await fetch(`${BASE_URL}/api/admin/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: cookies },
+    body: JSON.stringify({
+      registration_end_time: '2026-10-01T00:00',
+      registrations_open: 1,
+    })
+  });
+
+  const resExpiredReg = await fetch(`${BASE_URL}/api/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      teamName: `LateTeam ${Date.now()}`,
+      collegeName: 'KIT',
+      department: 'AIML',
+      yearSemester: '3rd Year',
+      leaderName: 'Late Leader',
+      leaderEmail: 'late@example.com',
+      leaderPhone: '9876543210',
+      members: [
+        { fullName: 'Late Leader', usn: `4KA23AI${Math.floor(Math.random() * 800) + 100}`, collegeName: 'KIT', department: 'AIML', yearSemester: '3rd Year' },
+        { fullName: 'Late Member 2', usn: `4KA23AI${Math.floor(Math.random() * 800) + 100}`, collegeName: 'KIT', department: 'AIML', yearSemester: '3rd Year' }
+      ]
+    })
+  });
+  const dataExpiredReg = await resExpiredReg.json();
+  assert(resExpiredReg.status === 400, 'Expired registration window rejected by server with HTTP 400');
+  assert(dataExpiredReg.error.toLowerCase().includes('window closed'), 'Error message informs user the window is closed');
+
+  // Re-open window for 96 hours
+  const futureEndTime = new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString();
+  await fetch(`${BASE_URL}/api/admin/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: cookies },
+    body: JSON.stringify({
+      registration_start_time: new Date().toISOString(),
+      registration_end_time: futureEndTime,
+      registration_window_hours: 96,
+      registrations_open: 1,
+    })
+  });
+
+  // 17. Acceptance Test: 500-Student Capacity Enforcement on Server
+  console.log('\n17. Testing 500-Student Capacity Limit Server Rejection:');
+  const setCapRes = await fetch(`${BASE_URL}/api/admin/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: cookies },
+    body: JSON.stringify({
+      max_student_capacity: 1,
+    })
+  });
+  const setCapData = await setCapRes.json();
+  assert(setCapRes.ok && setCapData.settings.max_student_capacity === 1, 'Admin set capacity to 1 for overflow test');
+
+  const resOverCap = await fetch(`${BASE_URL}/api/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      teamName: `OverCapTeam ${Date.now()}`,
+      collegeName: 'KIT',
+      department: 'AIML',
+      yearSemester: '3rd Year',
+      leaderName: 'OverCap Leader',
+      leaderEmail: 'overcap@example.com',
+      leaderPhone: '9876543210',
+      members: [
+        { fullName: 'OverCap Leader', usn: `4KA23AI${Math.floor(Math.random() * 800) + 100}`, collegeName: 'KIT', department: 'AIML', yearSemester: '3rd Year' },
+        { fullName: 'OverCap Member 2', usn: `4KA23AI${Math.floor(Math.random() * 800) + 100}`, collegeName: 'KIT', department: 'AIML', yearSemester: '3rd Year' }
+      ]
+    })
+  });
+  const dataOverCap = await resOverCap.json();
+  if (resOverCap.status !== 400) {
+    console.error('resOverCap returned unexpected response:', resOverCap.status, dataOverCap);
+  }
+  assert(resOverCap.status === 400, 'Over-capacity registration rejected by server with HTTP 400');
+  assert(Boolean(dataOverCap.error && dataOverCap.error.toLowerCase().includes('capacity')), 'Error message informs user event capacity reached');
+
+  // Restore official 500 capacity
+  await fetch(`${BASE_URL}/api/admin/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: cookies },
+    body: JSON.stringify({
+      max_student_capacity: 500,
+    })
+  });
+
+  // 18. Verify Public Settings API has 500 capacity and 96-hour window
+  console.log('\n18. Verifying Live Public Capacity & Window Settings:');
+  const resFinalSettings = await fetch(`${BASE_URL}/api/settings`);
+  const finalSettings = await resFinalSettings.json();
+  assert(finalSettings.maxStudentCapacity === 500, 'Official max capacity is 500 students');
+  assert(finalSettings.registrationWindowHours === 96, 'Official registration window is 96 hours');
+  assert(finalSettings.registrationsOpen === true, 'Registration is open with active window');
+  assert(finalSettings.spotsRemaining > 0, 'Spots remaining is calculated accurately');
 
   console.log(`\n==============================================`);
   console.log(`Test Results: ${passed} Passed, ${failed} Failed`);

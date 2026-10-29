@@ -19,6 +19,10 @@ export interface EventSettings {
   min_team_size: number;
   max_team_size: number;
   registrations_open: number; // 1 or 0
+  max_student_capacity: number; // default: 500
+  registration_window_hours: number; // default: 96
+  registration_start_time: string; // ISO / Asia/Kolkata string
+  registration_end_time: string; // ISO / Asia/Kolkata string
   payment_qr_url: string;
   payment_receiver_name: string;
   payment_upi_id: string;
@@ -37,6 +41,48 @@ export interface EventSettings {
   public_website_url: string;
   usn_validation_regex: string;
   updated_at: string;
+}
+
+export type RegistrationWindowStatus = 'OPEN' | 'UPCOMING' | 'CLOSED' | 'FULL';
+
+export interface PublicEventSettings {
+  eventName: string;
+  tagline: string;
+  organizingForum: string;
+  organizingInstitution: string;
+  organizingDepartment: string;
+  eventDate: string;
+  arrivalStart: string;
+  arrivalDeadline: string;
+  submissionDeadline: string;
+  timezone: string;
+  registrationFee: number;
+  minTeamSize: number;
+  maxTeamSize: number;
+  registrationsOpen: boolean;
+  registrationWindowStatus: RegistrationWindowStatus;
+  statusMessage: string;
+  maxStudentCapacity: number;
+  totalStudentsRegistered: number;
+  spotsRemaining: number;
+  registrationWindowHours: number;
+  registrationStartTime: string;
+  registrationEndTime: string;
+  paymentQrUrl: string;
+  paymentReceiverName: string;
+  paymentUpiId: string;
+  contactEmail: string;
+  contactPhone: string;
+  instagramUrl: string;
+  venueRoom: string;
+  prize1st: string;
+  prize2nd: string;
+  prize3rd: string;
+  problemStatementsPublished: boolean;
+  problemStatement1: { title: string; desc: string } | null;
+  problemStatement2: { title: string; desc: string } | null;
+  publicWebsiteUrl: string;
+  usnValidationRegex: string;
 }
 
 export interface TeamMember {
@@ -150,4 +196,6 @@ export interface DashboardStats {
   projectsMissing: number;
   disqualifiedTeams: number;
   totalVerifiedCollection: number;
+  maxStudentCapacity: number;
+  spotsRemaining: number;
 }

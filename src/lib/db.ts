@@ -12,6 +12,7 @@ import {
   AuditLog,
   AdminUser,
   DashboardStats,
+  RegistrationWindowStatus,
 } from './types';
 import { hashPassword } from './auth';
 
@@ -53,6 +54,10 @@ function initTables(db: Database.Database) {
       min_team_size INTEGER NOT NULL,
       max_team_size INTEGER NOT NULL,
       registrations_open INTEGER NOT NULL DEFAULT 1,
+      max_student_capacity INTEGER NOT NULL DEFAULT 500,
+      registration_window_hours INTEGER NOT NULL DEFAULT 96,
+      registration_start_time TEXT NOT NULL DEFAULT '',
+      registration_end_time TEXT NOT NULL DEFAULT '',
       payment_qr_url TEXT NOT NULL,
       payment_receiver_name TEXT NOT NULL,
       payment_upi_id TEXT NOT NULL,
@@ -250,6 +255,12 @@ function initTables(db: Database.Database) {
       VALUES (?, ?, ?, ?, ?, datetime('now'))
     `).run('admin-root', 'admin', pwdHash, 'AIORA Chief Organizer', 'SUPER_ADMIN');
   }
+
+  // Auto-migrations for 500-student capacity and 96-hour registration window
+  try { db.exec(`ALTER TABLE event_settings ADD COLUMN max_student_capacity INTEGER NOT NULL DEFAULT 500`); } catch {}
+  try { db.exec(`ALTER TABLE event_settings ADD COLUMN registration_window_hours INTEGER NOT NULL DEFAULT 96`); } catch {}
+  try { db.exec(`ALTER TABLE event_settings ADD COLUMN registration_start_time TEXT NOT NULL DEFAULT ''`); } catch {}
+  try { db.exec(`ALTER TABLE event_settings ADD COLUMN registration_end_time TEXT NOT NULL DEFAULT ''`); } catch {}
 }
 
 // ----------------- Helper Functions & Database Operations -----------------
@@ -285,6 +296,10 @@ export function updateSettings(settings: Partial<EventSettings>, performedBy: st
       min_team_size = @min_team_size,
       max_team_size = @max_team_size,
       registrations_open = @registrations_open,
+      max_student_capacity = @max_student_capacity,
+      registration_window_hours = @registration_window_hours,
+      registration_start_time = @registration_start_time,
+      registration_end_time = @registration_end_time,
       payment_qr_url = @payment_qr_url,
       payment_receiver_name = @payment_receiver_name,
       payment_upi_id = @payment_upi_id,
@@ -345,6 +360,26 @@ export function registerTeam(input: RegisterTeamInput): { team: Team; accessToke
     throw new Error('Registrations are currently closed by the organizers.');
   }
 
+  // Enforce 96-hour window in Asia/Kolkata
+  const nowTime = new Date();
+  const nowMs = nowTime.getTime();
+
+  if (settings.registration_start_time) {
+    const startMs = new Date(settings.registration_start_time).getTime();
+    if (nowMs < startMs) {
+      const startStr = new Date(settings.registration_start_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
+      throw new Error(`Registrations have not opened yet. The registration window opens on ${startStr} IST.`);
+    }
+  }
+
+  if (settings.registration_end_time) {
+    const endMs = new Date(settings.registration_end_time).getTime();
+    if (nowMs > endMs) {
+      const endStr = new Date(settings.registration_end_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
+      throw new Error(`The 96-hour registration window closed on ${endStr} IST. New team registrations are closed.`);
+    }
+  }
+
   // Validate team size (must include leader + other members = total)
   // Input members array contains all members including the leader or additional members
   // Let's ensure the leader is represented as member #1
@@ -398,6 +433,26 @@ export function registerTeam(input: RegisterTeamInput): { team: Team; accessToke
   const now = new Date().toISOString();
 
   const insertTransaction = db.transaction(() => {
+    // 500-Student Maximum Event Capacity Check (Atomic within transaction)
+    const capacityLimit = settings.max_student_capacity || 500;
+    const currentStudentsRow = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM team_members tm
+      JOIN teams t ON tm.team_id = t.id
+      WHERE t.registration_status != 'DISQUALIFIED'
+    `).get() as { count: number };
+
+    const currentCount = currentStudentsRow?.count || 0;
+    const incomingCount = input.members.length;
+
+    if (currentCount + incomingCount > capacityLimit) {
+      const remaining = Math.max(0, capacityLimit - currentCount);
+      if (remaining === 0) {
+        throw new Error(`Registration capacity reached: The maximum limit of ${capacityLimit} students has been reached.`);
+      }
+      throw new Error(`Registration capacity exceeded: Only ${remaining} student spots remain, but your team has ${incomingCount} members.`);
+    }
+
     // Insert Team
     db.prepare(`
       INSERT INTO teams (
@@ -919,6 +974,10 @@ export function getDashboardStats(): DashboardStats {
     WHERE status = 'APPROVED'
   `).get() as { total: number };
 
+  const settings = getSettings();
+  const maxStudentCapacity = settings.max_student_capacity || 500;
+  const spotsRemaining = Math.max(0, maxStudentCapacity - totalStudents);
+
   return {
     totalTeams,
     totalStudents,
@@ -931,6 +990,8 @@ export function getDashboardStats(): DashboardStats {
     projectsMissing,
     disqualifiedTeams,
     totalVerifiedCollection: verifiedCollectionRow.total,
+    maxStudentCapacity,
+    spotsRemaining,
   };
 }
 
@@ -963,5 +1024,84 @@ export function updateAdminPassword(username: string, newPassword: string): void
     SET password_hash = ?
     WHERE username = ?
   `).run(pwdHash, username);
+}
+
+export function getRegistrationStatusHelper(): {
+  status: RegistrationWindowStatus;
+  statusMessage: string;
+  totalStudentsRegistered: number;
+  maxStudentCapacity: number;
+  spotsRemaining: number;
+  isOpen: boolean;
+  startTime: string | null;
+  endTime: string | null;
+} {
+  const db = getDb();
+  const settings = getSettings();
+
+  const totalStudentsRow = db.prepare(`
+    SELECT COUNT(*) as count
+    FROM team_members tm
+    JOIN teams t ON tm.team_id = t.id
+    WHERE t.registration_status != 'DISQUALIFIED'
+  `).get() as { count: number };
+
+  const totalStudentsRegistered = totalStudentsRow ? totalStudentsRow.count : 0;
+  const maxStudentCapacity = settings.max_student_capacity || 500;
+  const spotsRemaining = Math.max(0, maxStudentCapacity - totalStudentsRegistered);
+
+  const now = new Date();
+  const nowMs = now.getTime();
+  let status: RegistrationWindowStatus = 'OPEN';
+  let statusMessage = 'Registration is live (96-hour window active).';
+  let isOpen = true;
+
+  if (spotsRemaining <= 0) {
+    status = 'FULL';
+    statusMessage = `Registration limit reached (${maxStudentCapacity} students capacity full).`;
+    isOpen = false;
+  } else if (settings.registrations_open !== 1) {
+    status = 'CLOSED';
+    statusMessage = 'Registrations are currently closed by the organizers.';
+    isOpen = false;
+  } else {
+    if (settings.registration_start_time) {
+      const startMs = new Date(settings.registration_start_time).getTime();
+      if (nowMs < startMs) {
+        status = 'UPCOMING';
+        const startStr = new Date(settings.registration_start_time).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        });
+        statusMessage = `Registration opens on ${startStr} IST.`;
+        isOpen = false;
+      }
+    }
+    if (settings.registration_end_time) {
+      const endMs = new Date(settings.registration_end_time).getTime();
+      if (nowMs > endMs) {
+        status = 'CLOSED';
+        const endStr = new Date(settings.registration_end_time).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        });
+        statusMessage = `The 96-hour registration window closed on ${endStr} IST.`;
+        isOpen = false;
+      }
+    }
+  }
+
+  return {
+    status,
+    statusMessage,
+    totalStudentsRegistered,
+    maxStudentCapacity,
+    spotsRemaining,
+    isOpen,
+    startTime: settings.registration_start_time || null,
+    endTime: settings.registration_end_time || null,
+  };
 }
 
