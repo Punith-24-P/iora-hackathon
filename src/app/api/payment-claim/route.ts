@@ -1,0 +1,74 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { submitPaymentClaim, getTeamById, getSettings } from '@/lib/db';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { teamId, accessToken, utrReference, screenshotBase64 } = body;
+
+    if (!teamId || !utrReference) {
+      return NextResponse.json({ error: 'Team ID and UPI Transaction Reference (UTR) are required.' }, { status: 400 });
+    }
+
+    const team = getTeamById(teamId);
+    if (!team) {
+      return NextResponse.json({ error: 'Team registration record not found.' }, { status: 404 });
+    }
+
+    if (accessToken && team.access_token !== accessToken) {
+      return NextResponse.json({ error: 'Unauthorized team access credentials.' }, { status: 403 });
+    }
+
+    const cleanUtr = utrReference.trim().toUpperCase();
+    if (cleanUtr.length < 6) {
+      return NextResponse.json({ error: 'Please enter a valid 12-digit or alphanumeric UPI reference (UTR).' }, { status: 400 });
+    }
+
+    const settings = getSettings();
+    const expectedAmount = settings.registration_fee || 400;
+
+    let screenshotUrl: string | null = null;
+    if (screenshotBase64 && typeof screenshotBase64 === 'string') {
+      try {
+        const matches = screenshotBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          const mimeType = matches[1];
+          const base64Data = matches[2];
+          const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+
+          const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'screenshots');
+          if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+          }
+
+          const fileName = `payment_${teamId}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
+          const filePath = path.join(uploadDir, fileName);
+          fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+          screenshotUrl = `/uploads/screenshots/${fileName}`;
+        }
+      } catch (uploadErr) {
+        console.error('Failed to save payment screenshot:', uploadErr);
+      }
+    }
+
+    const claim = submitPaymentClaim({
+      teamId,
+      utrReference: cleanUtr,
+      claimedAmount: expectedAmount,
+      screenshotUrl,
+    });
+
+    return NextResponse.json({
+      success: true,
+      claimId: claim.id,
+      status: claim.status,
+      message: 'Payment claim submitted successfully! Your payment is currently under manual organizer verification.',
+    });
+  } catch (error: any) {
+    console.error('Payment claim error:', error);
+    return NextResponse.json({ error: error.message || 'Failed to submit payment claim.' }, { status: 400 });
+  }
+}
