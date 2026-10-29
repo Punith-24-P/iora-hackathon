@@ -95,14 +95,6 @@ function NavbarInner() {
               <Sparkles className="w-3.5 h-3.5 text-slate-950" />
               Register Team
             </Link>
-
-            <Link
-              href="/admin/login"
-              title="Admin Portal"
-              className="p-2 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-900 transition border border-transparent hover:border-cyan-500/20"
-            >
-              <Shield className="w-4 h-4" />
-            </Link>
           </div>
 
           {/* Mobile Menu Button */}
@@ -161,14 +153,6 @@ function NavbarInner() {
             >
               <Send className="w-4 h-4 text-cyan-400" />
               Project Submission Portal
-            </Link>
-            <Link
-              href="/admin/login"
-              onClick={() => setMobileMenuOpen(false)}
-              className="w-full py-2 rounded-lg text-center text-xs text-slate-400 hover:text-cyan-400 flex items-center justify-center gap-1.5"
-            >
-              <Shield className="w-3.5 h-3.5" />
-              Admin Portal Login
             </Link>
           </div>
         </div>

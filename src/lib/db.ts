@@ -954,3 +954,14 @@ export function getAuditLogs(limit: number = 50): AuditLog[] {
   const db = getDb();
   return db.prepare('SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ?').all(limit) as AuditLog[];
 }
+
+export function updateAdminPassword(username: string, newPassword: string): void {
+  const db = getDb();
+  const pwdHash = hashPassword(newPassword);
+  db.prepare(`
+    UPDATE admin_users
+    SET password_hash = ?
+    WHERE username = ?
+  `).run(pwdHash, username);
+}
+

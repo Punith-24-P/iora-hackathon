@@ -125,14 +125,15 @@ export default function AdminLoginPage() {
           </button>
         </form>
 
-        {/* Development Helper Box */}
+        {/* Security Notice */}
         <div className="pt-4 border-t border-slate-800/80 text-center space-y-1">
-          <p className="text-[11px] text-slate-500">
-            Initial Provisioned Organizer Credentials:
-          </p>
-          <div className="text-[11px] font-mono text-cyan-300/80">
-            Username: <strong className="text-cyan-300">admin</strong> · Password: <strong className="text-cyan-300">AioraOrganizers@2026</strong>
+          <div className="flex items-center justify-center gap-1.5 text-xs text-slate-500">
+            <Lock className="w-3.5 h-3.5 text-slate-600" />
+            <span>Restricted Access · Authorized Organizers Only</span>
           </div>
+          <p className="text-[11px] text-slate-600">
+            All administrative actions and login attempts are logged for security.
+          </p>
         </div>
       </div>
     </div>

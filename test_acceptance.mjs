@@ -73,20 +73,25 @@ async function runTests() {
 
   // 4. Acceptance Test A: A new team registers with 2 members
   console.log('\n4. Testing Valid 2-Member Team Registration:');
+  const runRand = Math.floor(Math.random() * 90000) + 10000;
+  const teamAName = `CyberKnights ${runRand}`;
+  const usnA1 = `4KA23AI${Math.floor(Math.random() * 800) + 100}`;
+  const usnA2 = `4KA23AI${Math.floor(Math.random() * 800) + 100}`;
+
   const resTeamA = await fetch(`${BASE_URL}/api/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      teamName: 'CyberKnights 2026',
+      teamName: teamAName,
       collegeName: 'Karavali Institute of Technology',
       department: 'Artificial Intelligence & Machine Learning',
       yearSemester: '3rd Year / 5th Sem',
       leaderName: 'Punith Developer',
-      leaderEmail: 'punith.dev@kit.ac.in',
+      leaderEmail: `punith.${runRand}@kit.ac.in`,
       leaderPhone: '9876501234',
       members: [
-        { fullName: 'Punith Developer', usn: '4KA23AI001', collegeName: 'KIT', department: 'AI & ML', yearSemester: '3rd Year' },
-        { fullName: 'Ananya Sharma', usn: '4KA23AI002', collegeName: 'KIT', department: 'AI & ML', yearSemester: '3rd Year' }
+        { fullName: 'Punith Developer', usn: usnA1, collegeName: 'KIT', department: 'AI & ML', yearSemester: '3rd Year' },
+        { fullName: 'Ananya Sharma', usn: usnA2, collegeName: 'KIT', department: 'AI & ML', yearSemester: '3rd Year' }
       ]
     })
   });
@@ -101,22 +106,27 @@ async function runTests() {
 
   // 5. Acceptance Test B: A team registers with 4 members
   console.log('\n5. Testing Valid 4-Member Team Registration:');
+  const usnB1 = `4KA22CS${Math.floor(Math.random() * 800) + 100}`;
+  const usnB2 = `4KA22CS${Math.floor(Math.random() * 800) + 100}`;
+  const usnB3 = `4KA22CS${Math.floor(Math.random() * 800) + 100}`;
+  const usnB4 = `4KA22CS${Math.floor(Math.random() * 800) + 100}`;
+
   const resTeamB = await fetch(`${BASE_URL}/api/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      teamName: 'QuantumCoders',
+      teamName: `QuantumCoders ${runRand}`,
       collegeName: 'Karavali Institute of Technology',
       department: 'Computer Science & Engineering',
       yearSemester: '4th Year / 7th Sem',
       leaderName: 'Rohan Shetty',
-      leaderEmail: 'rohan.shetty@kit.ac.in',
+      leaderEmail: `rohan.${runRand}@kit.ac.in`,
       leaderPhone: '9123456780',
       members: [
-        { fullName: 'Rohan Shetty', usn: '4KA22CS050', collegeName: 'KIT', department: 'CSE', yearSemester: '4th Year' },
-        { fullName: 'Deepak Rao', usn: '4KA22CS051', collegeName: 'KIT', department: 'CSE', yearSemester: '4th Year' },
-        { fullName: 'Kavya Nayak', usn: '4KA22CS052', collegeName: 'KIT', department: 'CSE', yearSemester: '4th Year' },
-        { fullName: 'Aditya Bhat', usn: '4KA22CS053', collegeName: 'KIT', department: 'CSE', yearSemester: '4th Year' }
+        { fullName: 'Rohan Shetty', usn: usnB1, collegeName: 'KIT', department: 'CSE', yearSemester: '4th Year' },
+        { fullName: 'Deepak Rao', usn: usnB2, collegeName: 'KIT', department: 'CSE', yearSemester: '4th Year' },
+        { fullName: 'Kavya Nayak', usn: usnB3, collegeName: 'KIT', department: 'CSE', yearSemester: '4th Year' },
+        { fullName: 'Aditya Bhat', usn: usnB4, collegeName: 'KIT', department: 'CSE', yearSemester: '4th Year' }
       ]
     })
   });
@@ -126,7 +136,7 @@ async function runTests() {
 
   // 6. Acceptance Test H & I: Submit Payment Claim with UTR
   console.log('\n6. Testing Payment Claim Submission (Pending Verification):');
-  const testUtr = '430598765432';
+  const testUtr = `UTR${runRand}${Math.floor(Math.random() * 9000) + 1000}`;
   const resClaim = await fetch(`${BASE_URL}/api/payment-claim`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -276,7 +286,30 @@ async function runTests() {
     headers: { Cookie: cookies }
   });
   const csvText = await resCsv.text();
-  assert(resCsv.ok && csvText.includes('CyberKnights 2026') && csvText.includes('4KA23AI001'), 'CSV export includes full team details and student USNs');
+  assert(resCsv.ok && csvText.includes(teamAName) && csvText.includes(usnA1), 'CSV export includes full team details and student USNs');
+
+  // 15. Testing Admin Change Password API
+  console.log('\n15. Testing Admin Password Change:');
+  const resChangePwd = await fetch(`${BASE_URL}/api/admin/change-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookies },
+    body: JSON.stringify({
+      currentPassword: 'AioraOrganizers@2026',
+      newPassword: 'AioraNewSecretKey@2026',
+    })
+  });
+  const dataChangePwd = await resChangePwd.json();
+  assert(resChangePwd.ok && dataChangePwd.success, 'Admin changed password successfully');
+
+  // Revert back so default credentials work in tests
+  await fetch(`${BASE_URL}/api/admin/change-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookies },
+    body: JSON.stringify({
+      currentPassword: 'AioraNewSecretKey@2026',
+      newPassword: 'AioraOrganizers@2026',
+    })
+  });
 
   console.log(`\n==============================================`);
   console.log(`Test Results: ${passed} Passed, ${failed} Failed`);

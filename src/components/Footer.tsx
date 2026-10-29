@@ -95,9 +95,7 @@ export default function Footer() {
               <Link href="/posters" className="hover:text-cyan-400 transition">Official Posters</Link>
               <Link href="/faq" className="hover:text-cyan-400 transition">FAQs</Link>
               <Link href="/privacy" className="hover:text-cyan-400 transition">Privacy Notice</Link>
-              <Link href="/admin/login" className="text-cyan-400 hover:text-cyan-300 transition flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3" /> Admin Area
-              </Link>
+              <Link href="/contact" className="hover:text-cyan-400 transition">Contact Us</Link>
             </div>
           </div>
 

@@ -13,6 +13,9 @@ import {
   AlertCircle,
   FileCode,
   Sparkles,
+  Lock,
+  KeyRound,
+  Shield,
 } from 'lucide-react';
 
 export default function AdminSettingsPage() {
@@ -21,6 +24,13 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingQr, setUploadingQr] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const fetchSettings = () => {
     setLoading(true);
@@ -118,6 +128,47 @@ export default function AdminSettingsPage() {
       alert(err.message || 'Error resetting QR');
     } finally {
       setUploadingQr(false);
+    }
+  };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordMsg(null);
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordMsg({ type: 'error', text: 'All password fields are required.' });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordMsg({ type: 'error', text: 'New password and confirmation do not match.' });
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordMsg({ type: 'error', text: 'New password must be at least 8 characters long.' });
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const res = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update password');
+
+      setPasswordMsg({ type: 'success', text: 'Administrator password updated successfully! Keep it confidential.' });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => setPasswordMsg(null), 5000);
+    } catch (err: any) {
+      setPasswordMsg({ type: 'error', text: err.message || 'Error changing password' });
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -538,6 +589,91 @@ export default function AdminSettingsPage() {
           </button>
         </div>
       </form>
+
+      {/* Administrator Password & Security Section */}
+      <section className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-amber-400" />
+            <h2 className="text-base font-bold text-white">Administrator Password & Security</h2>
+          </div>
+          <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-500/30 uppercase font-mono">
+            ORGANIZER PRIVACY
+          </span>
+        </div>
+
+        <p className="text-xs text-slate-400">
+          Change your administrator password to ensure only authorized organizers can access the dashboard, verify payments, and manage student records.
+        </p>
+
+        {passwordMsg && (
+          <div
+            className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+              passwordMsg.type === 'success'
+                ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300'
+                : 'bg-rose-950/80 border-rose-500/40 text-rose-300'
+            }`}
+          >
+            {passwordMsg.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            )}
+            <span>{passwordMsg.text}</span>
+          </div>
+        )}
+
+        <form onSubmit={handlePasswordChange} className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-slate-300">Current Password</label>
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="••••••••••••"
+              required
+              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-slate-300">New Password (min 8 chars)</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="••••••••••••"
+              required
+              minLength={8}
+              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-slate-300">Confirm New Password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="••••••••••••"
+              required
+              minLength={8}
+              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+            />
+          </div>
+
+          <div className="md:col-span-3 flex justify-end pt-2">
+            <button
+              type="submit"
+              disabled={changingPassword}
+              className="px-5 py-2.5 rounded-xl font-bold text-slate-950 bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 hover:from-amber-300 hover:to-orange-300 transition flex items-center gap-2 shadow-[0_0_15px_rgba(251,191,36,0.3)] disabled:opacity-50 text-xs"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              {changingPassword ? 'Updating Password...' : 'Update Password'}
+            </button>
+          </div>
+        </form>
+      </section>
     </div>
   );
 }
