@@ -1,4 +1,6 @@
-import React from 'react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import Navbar from '@/components/Navbar';
@@ -24,15 +26,35 @@ import {
   ExternalLink,
   Lock,
 } from 'lucide-react';
-import { getSettings, getRegistrationStatusHelper } from '@/lib/db';
-import { connection } from 'next/server';
 
-export const instant = false;
+export default function HomePage() {
+  const [settings, setSettings] = useState<any>({
+    prize_1st: 'To be announced',
+    prize_2nd: 'To be announced',
+    prize_3rd: 'To be announced',
+    maxStudentCapacity: 500,
+    totalStudentsRegistered: 0,
+    spotsRemaining: 500,
+    registrationWindowStatus: 'OPEN',
+    registrationsOpen: true,
+  });
 
-export default async function HomePage() {
-  await connection();
-  const settings = getSettings();
-  const windowStatus = getRegistrationStatusHelper();
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && !data.error) setSettings(data);
+      })
+      .catch((err) => console.error('Failed to load settings:', err));
+  }, []);
+
+  const windowStatus = {
+    isOpen: settings.registrationsOpen ?? true,
+    status: settings.registrationWindowStatus || 'OPEN',
+    spotsRemaining: settings.spotsRemaining ?? 500,
+    totalStudentsRegistered: settings.totalStudentsRegistered ?? 0,
+    maxStudentCapacity: settings.maxStudentCapacity ?? 500,
+  };
 
   const judgingCriteria = [
     { title: 'Innovation & Originality', marks: 20, desc: 'Novelty of the concept, unique approach to the chosen problem, and creative problem solving.' },
