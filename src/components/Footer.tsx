@@ -127,6 +127,10 @@ export default function Footer() {
             <Link href="/rules" className="hover:text-slate-200 transition">Rules & Regulations</Link>
             <span>·</span>
             <Link href="/contact" className="hover:text-slate-200 transition">Organizers Contact</Link>
+            <span>·</span>
+            <Link href="/admin/login" className="hover:text-cyan-400 text-slate-500 transition flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5" /> Admin
+            </Link>
           </div>
         </div>
       </div>
