@@ -36,6 +36,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       return;
     }
 
+    setChecking(true);
     fetch('/api/admin/me')
       .then((res) => {
         if (!res.ok) throw new Error('Not authenticated');
@@ -46,16 +47,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         setChecking(false);
       })
       .catch(() => {
-        router.push('/admin/login');
+        window.location.href = '/admin/login';
       });
-  }, [pathname, isLoginPage, router]);
+  }, [pathname, isLoginPage]);
 
   const handleLogout = async () => {
     try {
       await fetch('/api/admin/logout', { method: 'POST' });
-      router.push('/admin/login');
+      window.location.href = '/admin/login';
     } catch (err) {
       console.error(err);
+      window.location.href = '/admin/login';
     }
   };
 

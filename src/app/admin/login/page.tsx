@@ -30,7 +30,8 @@ export default function AdminLoginPage() {
         throw new Error(data.error || 'Invalid administrator credentials.');
       }
 
-      router.push('/admin');
+      // Full page redirect to ensure cookie is cleanly passed to Next.js server components
+      window.location.href = '/admin';
     } catch (err: any) {
       setError(err.message || 'Login failed.');
     } finally {
