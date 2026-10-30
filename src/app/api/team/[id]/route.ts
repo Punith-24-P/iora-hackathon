@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTeamById } from '@/lib/db';
+import { getTeamByIdAsync } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -8,7 +8,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { searchParams } = new URL(req.url);
     const token = searchParams.get('token');
 
-    const team = getTeamById(id);
+    const team = await getTeamByIdAsync(id);
     if (!team) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
     }

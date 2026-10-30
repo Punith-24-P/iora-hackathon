@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { submitPaymentClaim, getTeamById, getSettings } from '@/lib/db';
+import { submitPaymentClaim, getTeamByIdAsync, getSettings } from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Team ID and UPI Transaction Reference (UTR) are required.' }, { status: 400 });
     }
 
-    const team = getTeamById(teamId);
+    const team = await getTeamByIdAsync(teamId);
     if (!team) {
       return NextResponse.json({ error: 'Team registration record not found.' }, { status: 404 });
     }
@@ -33,21 +33,29 @@ export async function POST(req: NextRequest) {
     let screenshotUrl: string | null = null;
     if (screenshotBase64 && typeof screenshotBase64 === 'string') {
       try {
-        const matches = screenshotBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-        if (matches && matches.length === 3) {
-          const mimeType = matches[1];
-          const base64Data = matches[2];
-          const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+        if (screenshotBase64.startsWith('data:image/')) {
+          // If in local dev with writable directory, save file to public/uploads
+          if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+            const matches = screenshotBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+            if (matches && matches.length === 3) {
+              const mimeType = matches[1];
+              const base64Data = matches[2];
+              const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
 
-          const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'screenshots');
-          if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
+              const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'screenshots');
+              if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+              }
+
+              const fileName = `payment_${teamId}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
+              const filePath = path.join(uploadDir, fileName);
+              fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+              screenshotUrl = `/uploads/screenshots/${fileName}`;
+            }
+          } else {
+            // In serverless, store inline data URL if reasonable size (< 500KB)
+            screenshotUrl = screenshotBase64.length < 500000 ? screenshotBase64 : null;
           }
-
-          const fileName = `payment_${teamId}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
-          const filePath = path.join(uploadDir, fileName);
-          fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
-          screenshotUrl = `/uploads/screenshots/${fileName}`;
         }
       } catch (uploadErr) {
         console.error('Failed to save payment screenshot:', uploadErr);

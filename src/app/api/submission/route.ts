@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { submitProject, getTeamById, getSettings } from '@/lib/db';
+import { submitProject, getTeamByIdAsync, getSettings } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
   try {
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Please enter a valid Source Code Repository URL (e.g., GitHub, GitLab).' }, { status: 400 });
     }
 
-    const team = getTeamById(teamId);
+    const team = await getTeamByIdAsync(teamId);
     if (!team) {
       return NextResponse.json({ error: 'Team not found.' }, { status: 404 });
     }

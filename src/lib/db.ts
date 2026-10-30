@@ -16,7 +16,7 @@ import {
 } from './types';
 import { hashPassword } from './auth';
 
-import { isSupabaseConfigured, getSupabaseClient } from './supabase-client';
+import { isSupabaseConfigured, getSupabaseClient, getCleanSupabaseKey } from './supabase-client';
 
 // Helper to resolve a guaranteed-writable directory across local development and serverless (Vercel/Lambda)
 function getDataDir(): string {
@@ -546,6 +546,52 @@ export function registerTeam(input: RegisterTeamInput): { team: Team; accessToke
   insertTransaction();
 
   const registeredTeam = getTeamById(teamId)!;
+
+  // Asynchronously replicate to Supabase if configured
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getCleanSupabaseKey() ? getSupabaseClient() : null;
+      if (supabase) {
+        supabase.from('teams').upsert({
+          id: teamId,
+          team_name: registeredTeam.team_name,
+          college_name: registeredTeam.college_name,
+          department: registeredTeam.department,
+          year_semester: registeredTeam.year_semester,
+          leader_name: registeredTeam.leader_name,
+          leader_email: registeredTeam.leader_email,
+          leader_phone: registeredTeam.leader_phone,
+          registration_status: registeredTeam.registration_status,
+          payment_status: registeredTeam.payment_status,
+          attendance_status: registeredTeam.attendance_status,
+          submission_status: registeredTeam.submission_status,
+          access_token: accessToken,
+          created_at: now,
+          updated_at: now,
+        }).then(({ error: tErr }) => {
+          if (tErr) console.error('Supabase team upsert warning:', tErr.message);
+        });
+
+        const memberRows = input.members.map((m, idx) => ({
+          team_id: teamId,
+          full_name: m.fullName.trim(),
+          usn: m.usn.trim().toUpperCase(),
+          college_name: m.collegeName.trim() || input.collegeName.trim(),
+          department: m.department.trim() || input.department.trim(),
+          year_semester: m.yearSemester.trim() || input.yearSemester.trim(),
+          is_leader: idx === 0 ? 1 : 0,
+          attendance_status: 'ABSENT',
+          created_at: now,
+        }));
+        supabase.from('team_members').insert(memberRows).then(({ error: mErr }) => {
+          if (mErr) console.error('Supabase members insert warning:', mErr.message);
+        });
+      }
+    } catch (e) {
+      console.error('Supabase replication error:', e);
+    }
+  }
+
   return { team: registeredTeam, accessToken };
 }
 
@@ -609,6 +655,37 @@ export function submitPaymentClaim(params: {
   transaction();
 
   const claim = db.prepare('SELECT * FROM payment_claims WHERE id = ?').get(claimId) as PaymentClaim;
+
+  // Asynchronously replicate payment claim to Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getCleanSupabaseKey() ? getSupabaseClient() : null;
+      if (supabase) {
+        supabase.from('payment_claims').upsert({
+          id: claimId,
+          team_id: params.teamId,
+          claimed_amount: params.claimedAmount,
+          utr_reference: cleanUtr,
+          screenshot_url: params.screenshotUrl || null,
+          status: 'PENDING',
+          created_at: now,
+        }).then(({ error: pErr }) => {
+          if (pErr) console.error('Supabase payment claim error:', pErr.message);
+        });
+
+        supabase.from('teams').update({
+          payment_status: 'CLAIMED',
+          registration_status: 'PAYMENT_SUBMITTED',
+          updated_at: now,
+        }).eq('id', params.teamId).then(({ error: tErr }) => {
+          if (tErr) console.error('Supabase team payment status update error:', tErr.message);
+        });
+      }
+    } catch (e) {
+      console.error('Supabase payment claim replication error:', e);
+    }
+  }
+
   return claim;
 }
 
@@ -912,6 +989,82 @@ export function getTeamById(teamId: string): Team | null {
     payment_claim: paymentClaim,
     submission,
   };
+}
+
+export async function getTeamByIdAsync(teamId: string): Promise<Team | null> {
+  const local = getTeamById(teamId);
+  if (local) return local;
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data: teamRow } = await supabase.from('teams').select('*').eq('id', teamId).single();
+        if (teamRow) {
+          const { data: members } = await supabase.from('team_members').select('*').eq('team_id', teamId).order('is_leader', { ascending: false });
+          const { data: claims } = await supabase.from('payment_claims').select('*').eq('team_id', teamId).order('created_at', { ascending: false }).limit(1);
+          const { data: subs } = await supabase.from('project_submissions').select('*').eq('team_id', teamId).single();
+
+          const db = getDb();
+          // Seed into local SQLite cache so subsequent operations in this container find it
+          try {
+            db.prepare(`
+              INSERT OR REPLACE INTO teams (
+                id, team_name, college_name, department, year_semester,
+                leader_name, leader_email, leader_phone, access_token,
+                registration_status, payment_status, attendance_status, submission_status,
+                created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+              teamRow.id,
+              teamRow.team_name,
+              teamRow.college_name,
+              teamRow.department,
+              teamRow.year_semester,
+              teamRow.leader_name,
+              teamRow.leader_email,
+              teamRow.leader_phone,
+              teamRow.access_token || '',
+              teamRow.registration_status || 'PENDING_PAYMENT',
+              teamRow.payment_status || 'UNPAID',
+              teamRow.attendance_status || 'NOT_ARRIVED',
+              teamRow.submission_status || 'NOT_SUBMITTED',
+              teamRow.created_at || new Date().toISOString(),
+              teamRow.updated_at || new Date().toISOString()
+            );
+
+            if (Array.isArray(members)) {
+              for (const m of members) {
+                db.prepare(`
+                  INSERT OR IGNORE INTO team_members (
+                    id, team_id, full_name, usn, college_name, department, year_semester, is_leader, created_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `).run(
+                  m.id || `MBR-${m.usn}`,
+                  teamRow.id,
+                  m.full_name,
+                  m.usn,
+                  m.college_name || teamRow.college_name,
+                  m.department || teamRow.department,
+                  m.year_semester || teamRow.year_semester,
+                  m.is_leader ? 1 : 0,
+                  m.created_at || new Date().toISOString()
+                );
+              }
+            }
+          } catch (cacheErr) {
+            console.error('Local cache populate error:', cacheErr);
+          }
+
+          return getTeamById(teamId);
+        }
+      }
+    } catch (e) {
+      console.error('Supabase query error in getTeamByIdAsync:', e);
+    }
+  }
+
+  return null;
 }
 
 export function getAllTeams(filters?: {
