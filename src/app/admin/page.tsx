@@ -19,6 +19,7 @@ import {
 export default function AdminOverviewPage() {
   const [stats, setStats] = useState<any>(null);
   const [recentAuditLogs, setRecentAuditLogs] = useState<any[]>([]);
+  const [databaseConnected, setDatabaseConnected] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchStats = () => {
@@ -28,6 +29,7 @@ export default function AdminOverviewPage() {
       .then((data) => {
         setStats(data.stats);
         setRecentAuditLogs(data.recentAuditLogs || []);
+        setDatabaseConnected(data.databaseConnected ?? null);
       })
       .catch((err) => console.error(err))
       .finally(() => setLoading(false));
@@ -42,10 +44,22 @@ export default function AdminOverviewPage() {
       {/* Top Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div>
-          <span className="text-[10px] font-mono uppercase tracking-widest text-cyan-400 font-bold block">
-            LIVE DATABASE METRICS
-          </span>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-cyan-400 font-bold block">
+              LIVE DATABASE METRICS
+            </span>
+            {databaseConnected !== null && (
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold flex items-center gap-1.5 ${
+                databaseConnected
+                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                  : 'bg-amber-950 text-amber-300 border border-amber-500/40'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${databaseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+                {databaseConnected ? 'Cloud PostgreSQL: Persistent & Connected' : 'Local SQLite Fallback'}
+              </span>
+            )}
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-1">
             Hackathon Executive Overview
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">

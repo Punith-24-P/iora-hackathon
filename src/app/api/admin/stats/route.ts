@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDashboardStatsAsync, getAuditLogs } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
-import { isSupabaseConfigured, getCleanSupabaseUrl, getCleanSupabaseKey, getSupabaseClient } from '@/lib/supabase-client';
+import { isSupabaseConfigured } from '@/lib/supabase-client';
 
 export async function GET(req: NextRequest) {
   const sessionCookie = req.cookies.get('aiora_admin_session')?.value;
@@ -13,48 +13,13 @@ export async function GET(req: NextRequest) {
     const stats = await getDashboardStatsAsync();
     const recentAuditLogs = getAuditLogs(10);
 
-    const isConfigured = isSupabaseConfigured();
-    const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-    const rawAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-    const rawService = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
-    let supabaseTest: any = {
-      isConfigured,
-      rawUrlValue: rawUrl.substring(0, 50),
-      rawAnonPrefix: rawAnon.substring(0, 15) + '... (len: ' + rawAnon.length + ')',
-      rawServicePrefix: rawService.substring(0, 15) + '... (len: ' + rawService.length + ')',
-      status: isConfigured ? 'CONNECTED' : 'PERSISTENT_DATABASE_MISSING',
-    };
-
-    if (isConfigured) {
-      try {
-        const client = getSupabaseClient();
-        if (client) {
-          const { count, error } = await client.from('teams').select('*', { count: 'exact', head: true });
-          if (error) {
-            supabaseTest.error = error.message;
-            supabaseTest.status = 'ERROR_QUERYING';
-          } else {
-            supabaseTest.status = 'CONNECTED';
-            supabaseTest.remoteTeamCount = count;
-          }
-        }
-      } catch (e: any) {
-        supabaseTest.error = e.message;
-        supabaseTest.status = 'CLIENT_EXCEPTION';
-      }
-    } else {
-      supabaseTest.status = 'PERSISTENT_DATABASE_MISSING';
-    }
-
     return NextResponse.json({
       stats,
       recentAuditLogs,
-      databaseStatus: supabaseTest,
+      databaseConnected: isSupabaseConfigured(),
     });
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
     return NextResponse.json({ error: 'Failed to retrieve stats' }, { status: 500 });
   }
 }
-
