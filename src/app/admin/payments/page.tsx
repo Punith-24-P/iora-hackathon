@@ -358,8 +358,13 @@ export default function AdminPaymentsPage() {
             >
               <X className="w-5 h-5" />
             </button>
-            <div className="relative w-[340px] sm:w-[450px] aspect-[1/1.8]">
-              <Image src={previewImage} alt="Payment Receipt" fill className="object-contain" unoptimized />
+            <div className="flex items-center justify-center p-2 max-h-[85vh] overflow-auto">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewImage}
+                alt="Payment Receipt"
+                className="max-h-[80vh] w-auto max-w-full rounded-xl object-contain shadow-2xl"
+              />
             </div>
           </div>
         </div>

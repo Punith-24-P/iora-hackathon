@@ -827,8 +827,13 @@ export default function AdminTeamsPage() {
             >
               <X className="w-5 h-5" />
             </button>
-            <div className="relative w-[340px] sm:w-[460px] aspect-[1/1.8]">
-              <Image src={previewScreenshot} alt="Payment Screenshot" fill className="object-contain" unoptimized />
+            <div className="flex items-center justify-center p-2 max-h-[85vh] overflow-auto">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewScreenshot}
+                alt="Payment Receipt"
+                className="max-h-[80vh] w-auto max-w-full rounded-xl object-contain shadow-2xl"
+              />
             </div>
           </div>
         </div>

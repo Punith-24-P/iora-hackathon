@@ -215,7 +215,7 @@ export default function RegisterPage() {
     }
   };
 
-  // Step 4: Handle Screenshot file input
+  // Step 4: Handle Screenshot file input with client-side canvas optimization
   const handleScreenshotChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -225,15 +225,52 @@ export default function RegisterPage() {
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Image file size must be less than 5MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Image file size must be less than 10MB.');
       return;
     }
 
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setScreenshotBase64(reader.result as string);
-      setScreenshotPreview(reader.result as string);
+    reader.onload = (event) => {
+      const rawDataUrl = event.target?.result as string;
+      if (!rawDataUrl) return;
+
+      const img = new (window as any).Image();
+      img.onload = () => {
+        const maxWidth = 1200;
+        const maxHeight = 1600;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width / height > maxWidth / maxHeight) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          setScreenshotBase64(compressedDataUrl);
+          setScreenshotPreview(compressedDataUrl);
+        } else {
+          setScreenshotBase64(rawDataUrl);
+          setScreenshotPreview(rawDataUrl);
+        }
+      };
+      img.onerror = () => {
+        setScreenshotBase64(rawDataUrl);
+        setScreenshotPreview(rawDataUrl);
+      };
+      img.src = rawDataUrl;
     };
     reader.readAsDataURL(file);
   };
