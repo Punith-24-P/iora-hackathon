@@ -16,20 +16,57 @@ import {
 } from './types';
 import { hashPassword } from './auth';
 
-// Ensure data directory exists
-const DATA_DIR = path.join(process.cwd(), 'data');
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+import { isSupabaseConfigured, getSupabaseClient } from './supabase-client';
+
+// Helper to resolve a guaranteed-writable directory across local development and serverless (Vercel/Lambda)
+function getDataDir(): string {
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    const tmpDir = path.join('/tmp', 'aiora-data');
+    if (!fs.existsSync(tmpDir)) {
+      try {
+        fs.mkdirSync(tmpDir, { recursive: true });
+      } catch {
+        // ignore if already created
+      }
+    }
+    return tmpDir;
+  }
+
+  const localDir = path.join(process.cwd(), 'data');
+  try {
+    if (!fs.existsSync(localDir)) {
+      fs.mkdirSync(localDir, { recursive: true });
+    }
+    return localDir;
+  } catch {
+    const fallback = path.join('/tmp', 'aiora-data');
+    if (!fs.existsSync(fallback)) {
+      try {
+        fs.mkdirSync(fallback, { recursive: true });
+      } catch {
+        // ignore
+      }
+    }
+    return fallback;
+  }
 }
 
-const DB_PATH = path.join(DATA_DIR, 'aiora.db');
 let dbInstance: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (!dbInstance) {
-    dbInstance = new Database(DB_PATH);
-    dbInstance.pragma('journal_mode = WAL');
-    dbInstance.pragma('foreign_keys = ON');
+    const dbPath = path.join(getDataDir(), 'aiora.db');
+    dbInstance = new Database(dbPath);
+    try {
+      dbInstance.pragma('journal_mode = WAL');
+    } catch {
+      // WAL mode is not supported on certain virtual filesystems or tmpfs
+    }
+    try {
+      dbInstance.pragma('foreign_keys = ON');
+    } catch {
+      // ignore
+    }
     initTables(dbInstance);
   }
   return dbInstance;

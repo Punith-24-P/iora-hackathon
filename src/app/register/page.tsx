@@ -71,8 +71,10 @@ export default function RegisterPage() {
   // Fetch settings
   useEffect(() => {
     fetch('/api/settings')
-      .then((res) => res.json())
-      .then((data) => setSettings(data))
+      .then((res) => (res.ok ? res.json().catch(() => null) : null))
+      .then((data) => {
+        if (data && !data.error) setSettings(data);
+      })
       .catch((err) => console.error('Failed to load settings:', err));
   }, []);
 
@@ -191,9 +193,15 @@ export default function RegisterPage() {
         }),
       });
 
-      const data = await res.json();
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        // Non-JSON response
+      }
+
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to submit team registration.');
+        throw new Error(data?.error || `Server returned error (${res.status}). Please check network or try again.`);
       }
 
       setRegisteredTeam(data.team);
@@ -254,9 +262,15 @@ export default function RegisterPage() {
         }),
       });
 
-      const data = await res.json();
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        // Non-JSON response
+      }
+
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to submit payment claim.');
+        throw new Error(data?.error || `Server returned error (${res.status}). Please try again.`);
       }
 
       setClaimSubmitted(true);
