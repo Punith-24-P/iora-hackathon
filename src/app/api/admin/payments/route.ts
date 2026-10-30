@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllPaymentClaims, approvePayment, rejectPayment, reversePaymentApproval } from '@/lib/db';
+import {
+  getAllPaymentClaimsAsync,
+  approvePaymentAsync,
+  rejectPaymentAsync,
+  reversePaymentApprovalAsync,
+} from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
@@ -10,7 +15,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const claims = getAllPaymentClaims();
+    const claims = await getAllPaymentClaimsAsync();
     return NextResponse.json({ claims });
   } catch (error) {
     console.error('Error fetching claims:', error);
@@ -35,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     if (action === 'APPROVE') {
       const amount = Number(verifiedAmount) || 400;
-      approvePayment({
+      await approvePaymentAsync({
         claimId,
         verifiedAmount: amount,
         verifiedBy: admin.username,
@@ -46,7 +51,7 @@ export async function POST(req: NextRequest) {
       if (!rejectionReason) {
         return NextResponse.json({ error: 'Rejection reason is required.' }, { status: 400 });
       }
-      rejectPayment({
+      await rejectPaymentAsync({
         claimId,
         rejectionReason,
         verifiedBy: admin.username,
@@ -56,7 +61,7 @@ export async function POST(req: NextRequest) {
       if (!reversalReason) {
         return NextResponse.json({ error: 'Reversal reason is required.' }, { status: 400 });
       }
-      reversePaymentApproval({
+      await reversePaymentApprovalAsync({
         claimId,
         reversalReason,
         performedBy: admin.username,

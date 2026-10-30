@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { registerTeam, getSettings } from '@/lib/db';
+import { registerTeamAsync, getSettings } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
   try {
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const result = registerTeam({
+    const result = await registerTeamAsync({
       teamName,
       collegeName,
       department,

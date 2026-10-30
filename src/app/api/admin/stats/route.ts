@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDashboardStats, getAuditLogs } from '@/lib/db';
+import { getDashboardStatsAsync, getAuditLogs } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const stats = getDashboardStats();
+    const stats = await getDashboardStatsAsync();
     const recentAuditLogs = getAuditLogs(10);
     return NextResponse.json({
       stats,

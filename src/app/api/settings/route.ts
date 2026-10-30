@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getSettings, getRegistrationStatusHelper } from '@/lib/db';
+import { getSettings, getRegistrationStatusHelperAsync } from '@/lib/db';
 
 export async function GET() {
   try {
     const settings = getSettings();
-    const windowStatus = getRegistrationStatusHelper();
+    const windowStatus = await getRegistrationStatusHelperAsync();
 
-    // Return sanitized public event settings
+    // Return sanitized public event settings with Edge Caching (shields DB during traffic spikes of 600+ students)
     return NextResponse.json({
       eventName: settings.event_name,
       tagline: settings.tagline,
@@ -51,6 +51,10 @@ export async function GET() {
       } : null,
       publicWebsiteUrl: settings.public_website_url,
       usnValidationRegex: settings.usn_validation_regex,
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=30',
+      },
     });
   } catch (error) {
     console.error('Error fetching event settings:', error);

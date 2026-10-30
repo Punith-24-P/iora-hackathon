@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { submitPaymentClaim, getTeamByIdAsync, getSettings } from '@/lib/db';
+import { submitPaymentClaimAsync, getTeamByIdAsync, getSettings } from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const claim = submitPaymentClaim({
+    const claim = await submitPaymentClaimAsync({
       teamId,
       utrReference: cleanUtr,
       claimedAmount: expectedAmount,

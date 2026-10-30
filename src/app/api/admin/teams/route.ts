@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllTeams, updateTeamDisqualification, getDb, addAuditLog } from '@/lib/db';
+import { getAllTeamsAsync, deleteTeamAsync, updateTeamDisqualificationAsync, getDb, addAuditLog } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const attendanceStatus = searchParams.get('attendanceStatus') || undefined;
     const submissionStatus = searchParams.get('submissionStatus') || undefined;
 
-    const teams = getAllTeams({
+    const teams = await getAllTeamsAsync({
       search,
       paymentStatus,
       attendanceStatus,
@@ -27,6 +27,42 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error('Error fetching teams:', error);
     return NextResponse.json({ error: 'Failed to retrieve teams' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const sessionCookie = req.cookies.get('aiora_admin_session')?.value;
+  const admin = sessionCookie ? verifySessionToken(sessionCookie) : null;
+  if (!admin) {
+    return NextResponse.json({ error: 'Unauthorized administrator access' }, { status: 401 });
+  }
+
+  try {
+    const { searchParams } = new URL(req.url);
+    let teamId = searchParams.get('teamId');
+
+    if (!teamId) {
+      try {
+        const body = await req.json();
+        teamId = body.teamId;
+      } catch {
+        // ignore if empty body
+      }
+    }
+
+    if (!teamId) {
+      return NextResponse.json({ error: 'Team ID is required to perform deletion.' }, { status: 400 });
+    }
+
+    await deleteTeamAsync(teamId, admin.username);
+
+    return NextResponse.json({
+      success: true,
+      message: `Team ${teamId} and all associated student rosters have been permanently deleted.`,
+    });
+  } catch (error: any) {
+    console.error('Team deletion error:', error);
+    return NextResponse.json({ error: error.message || 'Failed to delete team record' }, { status: 500 });
   }
 }
 
@@ -49,7 +85,7 @@ export async function PATCH(req: NextRequest) {
       if (!reason) {
         return NextResponse.json({ error: 'Disqualification reason is required.' }, { status: 400 });
       }
-      updateTeamDisqualification({
+      await updateTeamDisqualificationAsync({
         teamId,
         disqualify: true,
         reason,
@@ -57,7 +93,7 @@ export async function PATCH(req: NextRequest) {
       });
       return NextResponse.json({ success: true, message: 'Team has been marked as disqualified.' });
     } else if (action === 'REINSTATE') {
-      updateTeamDisqualification({
+      await updateTeamDisqualificationAsync({
         teamId,
         disqualify: false,
         reason: '',

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllTeams, getAllPaymentClaims, getAllSubmissions, getDashboardStats, getDb } from '@/lib/db';
+import { getAllTeamsAsync, getAllPaymentClaimsAsync, getAllSubmissions, getDashboardStatsAsync, getDb } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 function escapeCsv(val: any): string {
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     let filename = `aiora_${type}_${new Date().toISOString().split('T')[0]}.csv`;
 
     if (type === 'teams') {
-      const teams = getAllTeams();
+      const teams = await getAllTeamsAsync();
       const headers = [
         'Registration ID',
         'Team Name',
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
 
       csvContent = [headers.join(','), ...rows].join('\n');
     } else if (type === 'payments') {
-      const claims = getAllPaymentClaims();
+      const claims = await getAllPaymentClaimsAsync();
       const headers = [
         'Claim ID',
         'Team ID',
@@ -157,7 +157,7 @@ export async function GET(req: NextRequest) {
 
       csvContent = [headers.join(','), ...rows].join('\n');
     } else {
-      const stats = getDashboardStats();
+      const stats = await getDashboardStatsAsync();
       csvContent = [
         'Metric,Count / Value',
         `Total Registered Teams,${stats.totalTeams}`,
