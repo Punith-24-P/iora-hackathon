@@ -14,12 +14,16 @@ export async function GET(req: NextRequest) {
     const recentAuditLogs = getAuditLogs(10);
 
     const isConfigured = isSupabaseConfigured();
+    const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const rawAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+    const rawService = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
     let supabaseTest: any = {
       isConfigured,
-      hasUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
-      hasAnonKey: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-      hasServiceKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-      urlMasked: getCleanSupabaseUrl() ? getCleanSupabaseUrl().replace(/^(https:\/\/[^.]+).*/, '$1.supabase.co') : 'NOT_CONFIGURED',
+      rawUrlValue: rawUrl.substring(0, 50),
+      rawAnonPrefix: rawAnon.substring(0, 15) + '... (len: ' + rawAnon.length + ')',
+      rawServicePrefix: rawService.substring(0, 15) + '... (len: ' + rawService.length + ')',
+      status: isConfigured ? 'CONNECTED' : 'PERSISTENT_DATABASE_MISSING',
     };
 
     if (isConfigured) {
