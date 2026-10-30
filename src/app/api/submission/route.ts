@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { submitProject, getTeamByIdAsync, getSettings } from '@/lib/db';
+import { submitProjectAsync, getTeamByIdAsync, getSettingsAsync } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
   try {
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify deadline server-side
-    const settings = getSettings();
+    const settings = await getSettingsAsync();
     const deadlineString = `${settings.event_date}T${settings.submission_deadline}:00+05:30`;
     const deadlineTime = new Date(deadlineString).getTime();
     const nowTime = Date.now();
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       // Let's record as late submission with warning
     }
 
-    const submission = submitProject({
+    const submission = await submitProjectAsync({
       teamId,
       accessToken,
       projectName,

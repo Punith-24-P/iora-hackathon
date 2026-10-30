@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDashboardStatsAsync, getAuditLogs } from '@/lib/db';
+import { getDashboardStatsAsync, getAuditLogsAsync } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 import { isSupabaseConfigured } from '@/lib/supabase-client';
 
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const stats = await getDashboardStatsAsync();
-    const recentAuditLogs = getAuditLogs(10);
+    const recentAuditLogs = await getAuditLogsAsync(10);
 
     return NextResponse.json({
       stats,

@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getSettings, getRegistrationStatusHelperAsync } from '@/lib/db';
+import { getSettingsAsync, getRegistrationStatusHelperAsync } from '@/lib/db';
 
 export async function GET() {
   try {
-    const settings = getSettings();
+    const settings = await getSettingsAsync();
     const windowStatus = await getRegistrationStatusHelperAsync();
 
     // Return sanitized public event settings with Edge Caching (shields DB during traffic spikes of 600+ students)

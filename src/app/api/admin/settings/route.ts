@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSettings, updateSettings } from '@/lib/db';
+import { getSettingsAsync, updateSettingsAsync } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const settings = getSettings();
+    const settings = await getSettingsAsync();
     return NextResponse.json({ settings });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to retrieve settings' }, { status: 500 });
@@ -26,7 +26,7 @@ export async function PUT(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const updated = updateSettings(body, admin.username);
+    const updated = await updateSettingsAsync(body, admin.username);
     return NextResponse.json({
       success: true,
       settings: updated,

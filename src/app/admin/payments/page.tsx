@@ -264,6 +264,19 @@ export default function AdminPaymentsPage() {
               <div>Claimed Amount: <strong className="text-white font-mono">₹{selectedClaim.claimed_amount}</strong></div>
             </div>
 
+            {selectedClaim.screenshot_url && (
+              <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                <span className="text-xs text-slate-400">Payment Receipt Slip:</span>
+                <button
+                  type="button"
+                  onClick={() => setPreviewImage(selectedClaim.screenshot_url)}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs flex items-center gap-1.5 font-medium"
+                >
+                  <Eye className="w-3.5 h-3.5" /> View Uploaded Slip
+                </button>
+              </div>
+            )}
+
             {actionType === 'APPROVE' && (
               <div className="space-y-3">
                 <div className="space-y-1">

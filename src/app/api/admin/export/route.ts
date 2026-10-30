@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllTeamsAsync, getAllPaymentClaimsAsync, getAllSubmissions, getDashboardStatsAsync, getDb } from '@/lib/db';
+import { getAllTeamsAsync, getAllPaymentClaimsAsync, getAllSubmissionsAsync, getAttendanceLogsAsync, getDashboardStatsAsync } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 function escapeCsv(val: any): string {
@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
 
       csvContent = [headers.join(','), ...rows].join('\n');
     } else if (type === 'submissions') {
-      const subs = getAllSubmissions();
+      const subs = await getAllSubmissionsAsync();
       const headers = [
         'Submission ID',
         'Team ID',
@@ -134,20 +134,14 @@ export async function GET(req: NextRequest) {
 
       csvContent = [headers.join(','), ...rows].join('\n');
     } else if (type === 'attendance') {
-      const db = getDb();
-      const logs = db.prepare(`
-        SELECT al.*, t.team_name, t.leader_name, t.college_name
-        FROM attendance_logs al
-        JOIN teams t ON al.team_id = t.id
-        ORDER BY al.check_in_time ASC
-      `).all() as any[];
+      const logs = await getAttendanceLogsAsync();
 
       const headers = ['Log ID', 'Team ID', 'Team Name', 'College', 'Leader', 'Status', 'Marked By', 'Remarks', 'Check-In Time'];
-      const rows = logs.map(l => [
+      const rows = logs.map((l: any) => [
         escapeCsv(l.id),
         escapeCsv(l.team_id),
         escapeCsv(l.team_name),
-        escapeCsv(l.college_name),
+        escapeCsv(l.college_name || ''),
         escapeCsv(l.leader_name),
         escapeCsv(l.status),
         escapeCsv(l.marked_by),

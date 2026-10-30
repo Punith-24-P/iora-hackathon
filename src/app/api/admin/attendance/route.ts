@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { markAttendance, getDb } from '@/lib/db';
+import { markAttendanceAsync, getAttendanceLogsAsync } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
@@ -10,14 +10,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const db = getDb();
-    const logs = db.prepare(`
-      SELECT al.*, t.team_name, t.leader_name
-      FROM attendance_logs al
-      JOIN teams t ON al.team_id = t.id
-      ORDER BY al.check_in_time DESC
-    `).all();
-
+    const logs = await getAttendanceLogsAsync();
     return NextResponse.json({ logs });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch attendance logs' }, { status: 500 });
@@ -38,7 +31,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Team ID and attendance status are required.' }, { status: 400 });
     }
 
-    markAttendance({
+    await markAttendanceAsync({
       teamId,
       status,
       markedBy: admin.username,

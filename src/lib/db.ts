@@ -371,6 +371,151 @@ export function updateSettings(settings: Partial<EventSettings>, performedBy: st
   return updated;
 }
 
+export async function getSettingsAsync(): Promise<EventSettings> {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('event_settings')
+          .select('*')
+          .eq('id', 'default')
+          .maybeSingle();
+
+        if (!error && data) {
+          const settings: EventSettings = {
+            id: 'default',
+            event_name: data.event_name,
+            tagline: data.tagline,
+            organizing_forum: data.organizing_forum,
+            organizing_institution: data.organizing_institution,
+            organizing_department: data.organizing_department,
+            event_date: String(data.event_date),
+            arrival_start: String(data.arrival_start),
+            arrival_deadline: String(data.arrival_deadline),
+            submission_deadline: String(data.submission_deadline),
+            timezone: data.timezone,
+            registration_fee: Number(data.registration_fee) || 400,
+            min_team_size: Number(data.min_team_size) || 2,
+            max_team_size: Number(data.max_team_size) || 4,
+            registrations_open: Number(data.registrations_open) ?? 1,
+            max_student_capacity: Number(data.max_student_capacity) || 500,
+            registration_window_hours: Number(data.registration_window_hours) || 96,
+            registration_start_time: data.registration_start_time || '',
+            registration_end_time: data.registration_end_time || '',
+            payment_qr_url: data.payment_qr_url,
+            payment_receiver_name: data.payment_receiver_name,
+            payment_upi_id: data.payment_upi_id,
+            contact_email: data.contact_email || '',
+            contact_phone: data.contact_phone || '',
+            instagram_url: data.instagram_url || '',
+            venue_room: data.venue_room || '',
+            prize_1st: data.prize_1st || '',
+            prize_2nd: data.prize_2nd || '',
+            prize_3rd: data.prize_3rd || '',
+            problem_statement_1_title: data.problem_statement_1_title || '',
+            problem_statement_1_desc: data.problem_statement_1_desc || '',
+            problem_statement_2_title: data.problem_statement_2_title || '',
+            problem_statement_2_desc: data.problem_statement_2_desc || '',
+            problem_statements_published: Number(data.problem_statements_published) || 0,
+            public_website_url: data.public_website_url || 'https://iora-hackathon.vercel.app',
+            usn_validation_regex: data.usn_validation_regex || '^[0-9][A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{3}$|^[A-Za-z0-9_-]{5,15}$',
+            updated_at: data.updated_at || new Date().toISOString(),
+          };
+
+          try {
+            const db = getDb();
+            const stmt = db.prepare(`
+              UPDATE event_settings SET
+                event_name = @event_name,
+                tagline = @tagline,
+                organizing_forum = @organizing_forum,
+                organizing_institution = @organizing_institution,
+                organizing_department = @organizing_department,
+                event_date = @event_date,
+                arrival_start = @arrival_start,
+                arrival_deadline = @arrival_deadline,
+                submission_deadline = @submission_deadline,
+                timezone = @timezone,
+                registration_fee = @registration_fee,
+                min_team_size = @min_team_size,
+                max_team_size = @max_team_size,
+                registrations_open = @registrations_open,
+                max_student_capacity = @max_student_capacity,
+                registration_window_hours = @registration_window_hours,
+                registration_start_time = @registration_start_time,
+                registration_end_time = @registration_end_time,
+                payment_qr_url = @payment_qr_url,
+                payment_receiver_name = @payment_receiver_name,
+                payment_upi_id = @payment_upi_id,
+                contact_email = @contact_email,
+                contact_phone = @contact_phone,
+                instagram_url = @instagram_url,
+                venue_room = @venue_room,
+                prize_1st = @prize_1st,
+                prize_2nd = @prize_2nd,
+                prize_3rd = @prize_3rd,
+                problem_statement_1_title = @problem_statement_1_title,
+                problem_statement_1_desc = @problem_statement_1_desc,
+                problem_statement_2_title = @problem_statement_2_title,
+                problem_statement_2_desc = @problem_statement_2_desc,
+                problem_statements_published = @problem_statements_published,
+                public_website_url = @public_website_url,
+                usn_validation_regex = @usn_validation_regex,
+                updated_at = @updated_at
+              WHERE id = 'default'
+            `);
+            stmt.run(settings);
+          } catch {
+            // cache ignore
+          }
+
+          return settings;
+        }
+      }
+    } catch (e) {
+      console.error('getSettingsAsync Supabase error:', e);
+    }
+  }
+
+  return getSettings();
+}
+
+export async function updateSettingsAsync(
+  settings: Partial<EventSettings>,
+  performedBy: string
+): Promise<EventSettings> {
+  const updated = updateSettings(settings, performedBy);
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        await supabase
+          .from('event_settings')
+          .upsert({
+            ...updated,
+            updated_at: new Date().toISOString(),
+          });
+
+        await supabase.from('audit_logs').insert({
+          id: `AUD-${crypto.randomBytes(4).toString('hex')}`,
+          action: 'UPDATE_SETTINGS',
+          entity_type: 'EVENT_SETTINGS',
+          entity_id: 'default',
+          performed_by: performedBy,
+          details: `Updated event settings (Fee: ₹${updated.registration_fee}, Open: ${updated.registrations_open})`,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (e) {
+      console.error('updateSettingsAsync Supabase error:', e);
+    }
+  }
+
+  return updated;
+}
+
 // Register Team (Atomic Transaction)
 export interface RegisterTeamInput {
   teamName: string;
@@ -992,29 +1137,28 @@ export function getTeamById(teamId: string): Team | null {
 }
 
 export async function getTeamByIdAsync(teamId: string): Promise<Team | null> {
-  const local = getTeamById(teamId);
-  if (local) return local;
-
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseClient();
       if (supabase) {
-        const { data: teamRow } = await supabase.from('teams').select('*').eq('id', teamId).single();
+        const { data: teamRow } = await supabase.from('teams').select('*').eq('id', teamId).maybeSingle();
         if (teamRow) {
           const { data: members } = await supabase.from('team_members').select('*').eq('team_id', teamId).order('is_leader', { ascending: false });
           const { data: claims } = await supabase.from('payment_claims').select('*').eq('team_id', teamId).order('created_at', { ascending: false }).limit(1);
-          const { data: subs } = await supabase.from('project_submissions').select('*').eq('team_id', teamId).single();
+          const { data: subs } = await supabase.from('project_submissions').select('*').eq('team_id', teamId).maybeSingle();
 
-          const db = getDb();
-          // Seed into local SQLite cache so subsequent operations in this container find it
+          const claim = claims && claims.length > 0 ? claims[0] : null;
+
+          // Seed into local SQLite cache as best-effort
           try {
+            const db = getDb();
             db.prepare(`
               INSERT OR REPLACE INTO teams (
                 id, team_name, college_name, department, year_semester,
                 leader_name, leader_email, leader_phone, access_token,
                 registration_status, payment_status, attendance_status, submission_status,
-                created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                disqualification_reason, admin_notes, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
               teamRow.id,
               teamRow.team_name,
@@ -1029,6 +1173,8 @@ export async function getTeamByIdAsync(teamId: string): Promise<Team | null> {
               teamRow.payment_status || 'UNPAID',
               teamRow.attendance_status || 'NOT_ARRIVED',
               teamRow.submission_status || 'NOT_SUBMITTED',
+              teamRow.disqualification_reason || null,
+              teamRow.admin_notes || null,
               teamRow.created_at || new Date().toISOString(),
               teamRow.updated_at || new Date().toISOString()
             );
@@ -1053,10 +1199,71 @@ export async function getTeamByIdAsync(teamId: string): Promise<Team | null> {
               }
             }
           } catch (cacheErr) {
-            console.error('Local cache populate error:', cacheErr);
+            // ignore cache failure
           }
 
-          return getTeamById(teamId);
+          return {
+            id: teamRow.id,
+            team_name: teamRow.team_name,
+            college_name: teamRow.college_name,
+            department: teamRow.department,
+            year_semester: teamRow.year_semester,
+            leader_name: teamRow.leader_name,
+            leader_email: teamRow.leader_email,
+            leader_phone: teamRow.leader_phone,
+            access_token: teamRow.access_token || '',
+            registration_status: teamRow.registration_status || 'PENDING_PAYMENT',
+            payment_status: teamRow.payment_status || 'UNPAID',
+            attendance_status: teamRow.attendance_status || 'NOT_ARRIVED',
+            submission_status: teamRow.submission_status || 'NOT_SUBMITTED',
+            disqualification_reason: teamRow.disqualification_reason || null,
+            admin_notes: teamRow.admin_notes || null,
+            created_at: teamRow.created_at || new Date().toISOString(),
+            updated_at: teamRow.updated_at || new Date().toISOString(),
+            members: (members || []).map((m: any) => ({
+              id: m.id || `MBR-${m.usn}`,
+              team_id: teamRow.id,
+              full_name: m.full_name,
+              usn: m.usn,
+              college_name: m.college_name || teamRow.college_name,
+              department: m.department || teamRow.department,
+              year_semester: m.year_semester || teamRow.year_semester,
+              is_leader: m.is_leader ? 1 : 0,
+              created_at: m.created_at || teamRow.created_at,
+            })),
+            payment_claim: claim ? {
+              id: claim.id,
+              team_id: teamRow.id,
+              claimed_amount: Number(claim.claimed_amount) || 400,
+              utr_reference: claim.utr_reference,
+              screenshot_url: claim.screenshot_url || null,
+              status: claim.status,
+              verified_amount: claim.verified_amount ? Number(claim.verified_amount) : null,
+              rejection_reason: claim.rejection_reason || null,
+              verified_by: claim.verified_by || null,
+              verified_at: claim.verified_at || null,
+              created_at: claim.created_at,
+              team_name: teamRow.team_name,
+              leader_name: teamRow.leader_name,
+            } : undefined,
+            submission: subs ? {
+              id: subs.id,
+              team_id: teamRow.id,
+              project_name: subs.project_name,
+              problem_statement_chosen: subs.problem_statement_chosen,
+              project_description: subs.project_description,
+              real_world_problem: subs.real_world_problem,
+              ai_feature_description: subs.ai_feature_description,
+              technologies_used: subs.technologies_used,
+              repo_url: subs.repo_url,
+              live_demo_url: subs.live_demo_url || null,
+              supporting_doc_url: subs.supporting_doc_url || null,
+              submitted_at: subs.submitted_at || teamRow.created_at,
+              is_late: subs.is_late ? 1 : 0,
+              team_name: teamRow.team_name,
+              leader_name: teamRow.leader_name,
+            } : undefined,
+          };
         }
       }
     } catch (e) {
@@ -1064,7 +1271,7 @@ export async function getTeamByIdAsync(teamId: string): Promise<Team | null> {
     }
   }
 
-  return null;
+  return getTeamById(teamId);
 }
 
 export function getAllTeams(filters?: {
@@ -1745,10 +1952,37 @@ export async function submitPaymentClaimAsync(params: {
 }): Promise<PaymentClaim> {
   const cleanUtr = params.utrReference.trim().toUpperCase();
 
+  if (!cleanUtr || cleanUtr.length < 6) {
+    throw new Error('Please enter a valid UPI transaction reference number (UTR / Ref ID).');
+  }
+
+  const claimId = `PAY-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+  const now = new Date().toISOString();
+
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseClient();
       if (supabase) {
+        // 1. Check if team exists in Supabase
+        const { data: teamRow } = await supabase
+          .from('teams')
+          .select('id, team_name, payment_status')
+          .eq('id', params.teamId)
+          .maybeSingle();
+
+        if (!teamRow) {
+          try {
+            const db = getDb();
+            const localTeam = db.prepare('SELECT id FROM teams WHERE id = ?').get(params.teamId);
+            if (!localTeam) {
+              throw new Error('Team registration not found. Please register your team first.');
+            }
+          } catch (e: any) {
+            throw new Error(e.message || 'Team registration not found.');
+          }
+        }
+
+        // 2. Check if UTR is already used in an approved or pending claim
         const { data: existingClaims } = await supabase
           .from('payment_claims')
           .select('id, utr_reference, status')
@@ -1763,24 +1997,10 @@ export async function submitPaymentClaimAsync(params: {
             throw new Error(`A payment claim with reference "${cleanUtr}" is already undergoing verification.`);
           }
         }
-      }
-    } catch (e: any) {
-      if (e.message && e.message.includes('Transaction reference')) {
-        throw e;
-      }
-      console.error('Supabase UTR check warning:', e);
-    }
-  }
 
-  const claim = submitPaymentClaim(params);
-  const now = new Date().toISOString();
-
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = getSupabaseClient();
-      if (supabase) {
+        // 3. Upsert payment claim into Supabase
         const { error: pErr } = await supabase.from('payment_claims').upsert({
-          id: claim.id,
+          id: claimId,
           team_id: params.teamId,
           claimed_amount: params.claimedAmount,
           utr_reference: cleanUtr,
@@ -1788,21 +2008,76 @@ export async function submitPaymentClaimAsync(params: {
           status: 'PENDING',
           created_at: now,
         });
-        if (pErr) console.error('Supabase claim upsert error:', pErr);
+        if (pErr) {
+          console.error('Supabase claim upsert error:', pErr);
+          throw new Error(`Failed to record payment claim: ${pErr.message}`);
+        }
 
+        // 4. Update team status in Supabase
         const { error: tErr } = await supabase.from('teams').update({
           payment_status: 'CLAIMED',
           registration_status: 'PAYMENT_SUBMITTED',
           updated_at: now,
         }).eq('id', params.teamId);
         if (tErr) console.error('Supabase team status update error:', tErr);
+
+        // 5. Add audit log in Supabase
+        try {
+          await supabase.from('audit_logs').insert({
+            id: `AUD-${crypto.randomBytes(4).toString('hex')}`,
+            action: 'PAYMENT_CLAIM_SUBMITTED',
+            entity_type: 'PAYMENT_CLAIM',
+            entity_id: claimId,
+            performed_by: params.teamId,
+            details: `Submitted UTR ${cleanUtr} for ₹${params.claimedAmount}`,
+            timestamp: now,
+          });
+        } catch {}
+
+        // 6. Best-effort cache into local SQLite
+        try {
+          const db = getDb();
+          db.prepare(`
+            INSERT OR REPLACE INTO payment_claims (
+              id, team_id, claimed_amount, utr_reference, screenshot_url, status, created_at
+            ) VALUES (?, ?, ?, ?, ?, 'PENDING', ?)
+          `).run(claimId, params.teamId, params.claimedAmount, cleanUtr, params.screenshotUrl || null, now);
+
+          db.prepare(`
+            UPDATE teams SET
+              payment_status = 'CLAIMED',
+              registration_status = 'PAYMENT_SUBMITTED',
+              updated_at = ?
+            WHERE id = ?
+          `).run(now, params.teamId);
+        } catch {
+          // ignore SQLite cache errors
+        }
+
+        return {
+          id: claimId,
+          team_id: params.teamId,
+          claimed_amount: params.claimedAmount,
+          utr_reference: cleanUtr,
+          screenshot_url: params.screenshotUrl || null,
+          status: 'PENDING',
+          verified_amount: null,
+          rejection_reason: null,
+          verified_by: null,
+          verified_at: null,
+          created_at: now,
+        };
       }
-    } catch (e) {
-      console.error('Supabase claim replication error:', e);
+    } catch (e: any) {
+      if (e.message && (e.message.includes('Transaction reference') || e.message.includes('Team registration'))) {
+        throw e;
+      }
+      console.error('Supabase claim submit error:', e);
+      throw e;
     }
   }
 
-  return claim;
+  return submitPaymentClaim(params);
 }
 
 export async function approvePaymentAsync(params: {
@@ -1811,35 +2086,123 @@ export async function approvePaymentAsync(params: {
   verifiedBy: string;
   adminNotes?: string;
 }): Promise<void> {
-  approvePayment(params);
+  const now = new Date().toISOString();
 
   if (isSupabaseConfigured()) {
-    try {
-      const supabase = getSupabaseClient();
-      if (supabase) {
-        const now = new Date().toISOString();
-        const { data: claimRow } = await supabase.from('payment_claims').select('team_id').eq('id', params.claimId).single();
-        const teamId = claimRow?.team_id;
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      // 1. Fetch claim from Supabase
+      const { data: claimRow } = await supabase
+        .from('payment_claims')
+        .select('*, team:teams(*)')
+        .eq('id', params.claimId)
+        .maybeSingle();
 
-        await supabase.from('payment_claims').update({
+      let teamId = claimRow?.team_id || (claimRow?.team as any)?.id;
+
+      if (!claimRow) {
+        try {
+          const db = getDb();
+          const localClaim = db.prepare('SELECT * FROM payment_claims WHERE id = ?').get(params.claimId) as PaymentClaim | undefined;
+          if (localClaim) {
+            teamId = localClaim.team_id;
+          } else {
+            throw new Error('Payment claim not found.');
+          }
+        } catch (e: any) {
+          throw new Error('Payment claim not found.');
+        }
+      }
+
+      // 2. Update claim in Supabase
+      const { error: claimErr } = await supabase
+        .from('payment_claims')
+        .update({
           status: 'APPROVED',
           verified_amount: params.verifiedAmount,
           verified_by: params.verifiedBy,
           verified_at: now,
-        }).eq('id', params.claimId);
+        })
+        .eq('id', params.claimId);
 
-        if (teamId) {
-          await supabase.from('teams').update({
+      if (claimErr) {
+        console.error('Supabase approve payment_claims error:', claimErr);
+        throw new Error(`Failed to approve payment: ${claimErr.message}`);
+      }
+
+      // 3. Update team in Supabase
+      if (teamId) {
+        const existingNotes = (claimRow?.team as any)?.admin_notes || '';
+        const adminNotesAppend = params.adminNotes ? `\n[Verified by ${params.verifiedBy}: ${params.adminNotes}]` : '';
+        const updatedNotes = existingNotes ? `${existingNotes}${adminNotesAppend}` : (params.adminNotes ? `[Verified by ${params.verifiedBy}: ${params.adminNotes}]` : null);
+
+        const { error: teamErr } = await supabase
+          .from('teams')
+          .update({
             payment_status: 'VERIFIED',
             registration_status: 'CONFIRMED',
+            admin_notes: updatedNotes,
             updated_at: now,
-          }).eq('id', teamId);
-        }
+          })
+          .eq('id', teamId);
+
+        if (teamErr) console.error('Supabase update team payment status error:', teamErr);
       }
-    } catch (e) {
-      console.error('Supabase approvePaymentAsync error:', e);
+
+      // 4. Audit log in Supabase
+      try {
+        await supabase.from('audit_logs').insert({
+          id: `AUD-${crypto.randomBytes(4).toString('hex')}`,
+          action: 'PAYMENT_APPROVED',
+          entity_type: 'PAYMENT_CLAIM',
+          entity_id: params.claimId,
+          performed_by: params.verifiedBy,
+          details: `Payment approved for team ${teamId}. Verified Amount: ₹${params.verifiedAmount}, UTR: ${claimRow?.utr_reference || 'N/A'}${params.adminNotes ? ` (${params.adminNotes})` : ''}`,
+          timestamp: now,
+        });
+      } catch (aErr) {
+        console.error('Supabase audit log error:', aErr);
+      }
+
+      // 5. Best-effort cache into local SQLite
+      try {
+        const db = getDb();
+        db.prepare(`
+          UPDATE payment_claims SET
+            status = 'APPROVED',
+            verified_amount = ?,
+            verified_by = ?,
+            verified_at = ?
+          WHERE id = ?
+        `).run(params.verifiedAmount, params.verifiedBy, now, params.claimId);
+
+        if (teamId) {
+          db.prepare(`
+            UPDATE teams SET
+              payment_status = 'VERIFIED',
+              registration_status = 'CONFIRMED',
+              admin_notes = COALESCE(admin_notes, '') || ?,
+              updated_at = ?
+            WHERE id = ?
+          `).run(params.adminNotes ? `\n[Verified by ${params.verifiedBy}: ${params.adminNotes}]` : '', now, teamId);
+        }
+
+        addAuditLog({
+          action: 'PAYMENT_APPROVED',
+          entity_type: 'PAYMENT_CLAIM',
+          entity_id: params.claimId,
+          performed_by: params.verifiedBy,
+          details: `Payment approved for team ${teamId}. Verified Amount: ₹${params.verifiedAmount}`,
+        });
+      } catch {
+        // Safe to ignore SQLite cache failure
+      }
+
+      return;
     }
   }
+
+  approvePayment(params);
 }
 
 export async function rejectPaymentAsync(params: {
@@ -1847,35 +2210,111 @@ export async function rejectPaymentAsync(params: {
   rejectionReason: string;
   verifiedBy: string;
 }): Promise<void> {
-  rejectPayment(params);
+  const now = new Date().toISOString();
 
   if (isSupabaseConfigured()) {
-    try {
-      const supabase = getSupabaseClient();
-      if (supabase) {
-        const now = new Date().toISOString();
-        const { data: claimRow } = await supabase.from('payment_claims').select('team_id').eq('id', params.claimId).single();
-        const teamId = claimRow?.team_id;
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { data: claimRow } = await supabase
+        .from('payment_claims')
+        .select('*, team:teams(*)')
+        .eq('id', params.claimId)
+        .maybeSingle();
 
-        await supabase.from('payment_claims').update({
+      let teamId = claimRow?.team_id || (claimRow?.team as any)?.id;
+
+      if (!claimRow) {
+        try {
+          const db = getDb();
+          const localClaim = db.prepare('SELECT * FROM payment_claims WHERE id = ?').get(params.claimId) as PaymentClaim | undefined;
+          if (localClaim) {
+            teamId = localClaim.team_id;
+          } else {
+            throw new Error('Payment claim not found.');
+          }
+        } catch {
+          throw new Error('Payment claim not found.');
+        }
+      }
+
+      const { error: claimErr } = await supabase
+        .from('payment_claims')
+        .update({
           status: 'REJECTED',
           rejection_reason: params.rejectionReason,
           verified_by: params.verifiedBy,
           verified_at: now,
-        }).eq('id', params.claimId);
+        })
+        .eq('id', params.claimId);
 
-        if (teamId) {
-          await supabase.from('teams').update({
+      if (claimErr) {
+        throw new Error(`Failed to reject payment: ${claimErr.message}`);
+      }
+
+      if (teamId) {
+        const existingNotes = (claimRow?.team as any)?.admin_notes || '';
+        const adminNotesAppend = `\n[Payment Rejected by ${params.verifiedBy}: ${params.rejectionReason}]`;
+        const updatedNotes = existingNotes ? `${existingNotes}${adminNotesAppend}` : adminNotesAppend.trim();
+
+        await supabase
+          .from('teams')
+          .update({
             payment_status: 'REJECTED',
             registration_status: 'PENDING_PAYMENT',
+            admin_notes: updatedNotes,
             updated_at: now,
-          }).eq('id', teamId);
-        }
+          })
+          .eq('id', teamId);
       }
-    } catch (e) {
-      console.error('Supabase rejectPaymentAsync error:', e);
+
+      try {
+        await supabase.from('audit_logs').insert({
+          id: `AUD-${crypto.randomBytes(4).toString('hex')}`,
+          action: 'PAYMENT_REJECTED',
+          entity_type: 'PAYMENT_CLAIM',
+          entity_id: params.claimId,
+          performed_by: params.verifiedBy,
+          details: `Rejected claim for team ${teamId}. Reason: ${params.rejectionReason}`,
+          timestamp: now,
+        });
+      } catch {}
+
+      try {
+        const db = getDb();
+        db.prepare(`
+          UPDATE payment_claims SET
+            status = 'REJECTED',
+            rejection_reason = ?,
+            verified_by = ?,
+            verified_at = ?
+          WHERE id = ?
+        `).run(params.rejectionReason, params.verifiedBy, now, params.claimId);
+
+        if (teamId) {
+          db.prepare(`
+            UPDATE teams SET
+              payment_status = 'REJECTED',
+              registration_status = 'PENDING_PAYMENT',
+              admin_notes = COALESCE(admin_notes, '') || ?,
+              updated_at = ?
+            WHERE id = ?
+          `).run(`\n[Payment Rejected by ${params.verifiedBy}: ${params.rejectionReason}]`, now, teamId);
+        }
+
+        addAuditLog({
+          action: 'PAYMENT_REJECTED',
+          entity_type: 'PAYMENT_CLAIM',
+          entity_id: params.claimId,
+          performed_by: params.verifiedBy,
+          details: `Rejected claim for team ${teamId}. Reason: ${params.rejectionReason}`,
+        });
+      } catch {}
+
+      return;
     }
   }
+
+  rejectPayment(params);
 }
 
 export async function reversePaymentApprovalAsync(params: {
@@ -1883,34 +2322,110 @@ export async function reversePaymentApprovalAsync(params: {
   reversalReason: string;
   performedBy: string;
 }): Promise<void> {
-  reversePaymentApproval(params);
+  const now = new Date().toISOString();
 
   if (isSupabaseConfigured()) {
-    try {
-      const supabase = getSupabaseClient();
-      if (supabase) {
-        const now = new Date().toISOString();
-        const { data: claimRow } = await supabase.from('payment_claims').select('team_id').eq('id', params.claimId).single();
-        const teamId = claimRow?.team_id;
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { data: claimRow } = await supabase
+        .from('payment_claims')
+        .select('*, team:teams(*)')
+        .eq('id', params.claimId)
+        .maybeSingle();
 
-        await supabase.from('payment_claims').update({
-          status: 'REJECTED',
-          rejection_reason: `Reversed by ${params.performedBy}: ${params.reversalReason}`,
-          verified_at: now,
-        }).eq('id', params.claimId);
+      let teamId = claimRow?.team_id || (claimRow?.team as any)?.id;
 
-        if (teamId) {
-          await supabase.from('teams').update({
-            payment_status: 'UNPAID',
-            registration_status: 'PENDING_PAYMENT',
-            updated_at: now,
-          }).eq('id', teamId);
+      if (!claimRow) {
+        try {
+          const db = getDb();
+          const localClaim = db.prepare('SELECT * FROM payment_claims WHERE id = ?').get(params.claimId) as PaymentClaim | undefined;
+          if (localClaim) {
+            teamId = localClaim.team_id;
+          } else {
+            throw new Error('Payment claim not found.');
+          }
+        } catch {
+          throw new Error('Payment claim not found.');
         }
       }
-    } catch (e) {
-      console.error('Supabase reversePaymentApprovalAsync error:', e);
+
+      const reversalText = `Reversed by ${params.performedBy}: ${params.reversalReason}`;
+      const { error: claimErr } = await supabase
+        .from('payment_claims')
+        .update({
+          status: 'REJECTED',
+          rejection_reason: reversalText,
+          verified_at: now,
+        })
+        .eq('id', params.claimId);
+
+      if (claimErr) {
+        throw new Error(`Failed to reverse payment approval: ${claimErr.message}`);
+      }
+
+      if (teamId) {
+        const existingNotes = (claimRow?.team as any)?.admin_notes || '';
+        const adminNotesAppend = `\n[Payment Approval Reversed by ${params.performedBy}: ${params.reversalReason}]`;
+        const updatedNotes = existingNotes ? `${existingNotes}${adminNotesAppend}` : adminNotesAppend.trim();
+
+        await supabase
+          .from('teams')
+          .update({
+            payment_status: 'UNPAID',
+            registration_status: 'PENDING_PAYMENT',
+            admin_notes: updatedNotes,
+            updated_at: now,
+          })
+          .eq('id', teamId);
+      }
+
+      try {
+        await supabase.from('audit_logs').insert({
+          id: `AUD-${crypto.randomBytes(4).toString('hex')}`,
+          action: 'PAYMENT_APPROVAL_REVERSED',
+          entity_type: 'PAYMENT_CLAIM',
+          entity_id: params.claimId,
+          performed_by: params.performedBy,
+          details: `Reversed approval for team ${teamId}. Reason: ${params.reversalReason}`,
+          timestamp: now,
+        });
+      } catch {}
+
+      try {
+        const db = getDb();
+        db.prepare(`
+          UPDATE payment_claims SET
+            status = 'REJECTED',
+            rejection_reason = ?,
+            verified_at = ?
+          WHERE id = ?
+        `).run(reversalText, now, params.claimId);
+
+        if (teamId) {
+          db.prepare(`
+            UPDATE teams SET
+              payment_status = 'UNPAID',
+              registration_status = 'PENDING_PAYMENT',
+              admin_notes = COALESCE(admin_notes, '') || ?,
+              updated_at = ?
+            WHERE id = ?
+          `).run(`\n[Payment Approval Reversed by ${params.performedBy}: ${params.reversalReason}]`, now, teamId);
+        }
+
+        addAuditLog({
+          action: 'PAYMENT_APPROVAL_REVERSED',
+          entity_type: 'PAYMENT_CLAIM',
+          entity_id: params.claimId,
+          performed_by: params.performedBy,
+          details: `Reversed approval for team ${teamId}. Reason: ${params.reversalReason}`,
+        });
+      } catch {}
+
+      return;
     }
   }
+
+  reversePaymentApproval(params);
 }
 
 export async function markAttendanceAsync(params: {
@@ -1919,30 +2434,97 @@ export async function markAttendanceAsync(params: {
   markedBy: string;
   remarks?: string;
 }): Promise<void> {
-  markAttendance(params);
+  const now = new Date().toISOString();
+  const logId = `ATT-${crypto.randomBytes(4).toString('hex')}`;
+
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseClient();
       if (supabase) {
-        const now = new Date().toISOString();
         await supabase.from('teams').update({
           attendance_status: params.status,
           updated_at: now,
         }).eq('id', params.teamId);
 
         await supabase.from('attendance_logs').insert({
-          id: `ATT-${crypto.randomBytes(4).toString('hex')}`,
+          id: logId,
           team_id: params.teamId,
           check_in_time: now,
           status: params.status,
           marked_by: params.markedBy,
           remarks: params.remarks || null,
         });
+
+        await supabase.from('audit_logs').insert({
+          id: `AUD-${crypto.randomBytes(4).toString('hex')}`,
+          action: 'ATTENDANCE_MARKED',
+          entity_type: 'TEAM',
+          entity_id: params.teamId,
+          performed_by: params.markedBy,
+          details: `Marked ${params.status} for team ${params.teamId}. Remarks: ${params.remarks || 'None'}`,
+          timestamp: now,
+        });
+
+        try {
+          const db = getDb();
+          db.prepare(`
+            UPDATE teams SET attendance_status = ?, updated_at = ? WHERE id = ?
+          `).run(params.status, now, params.teamId);
+          db.prepare(`
+            INSERT INTO attendance_logs (id, team_id, check_in_time, status, marked_by, remarks)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `).run(logId, params.teamId, now, params.status, params.markedBy, params.remarks || null);
+        } catch {}
+
+        return;
       }
     } catch (e) {
       console.error('Supabase markAttendanceAsync error:', e);
     }
   }
+
+  markAttendance(params);
+}
+
+export async function getAttendanceLogsAsync(): Promise<AttendanceLog[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('attendance_logs')
+          .select(`
+            *,
+            team:teams(team_name, leader_name, college_name)
+          `)
+          .order('check_in_time', { ascending: false });
+
+        if (!error && Array.isArray(data)) {
+          return data.map((l: any) => ({
+            id: l.id,
+            team_id: l.team_id,
+            check_in_time: l.check_in_time,
+            status: l.status,
+            marked_by: l.marked_by,
+            remarks: l.remarks || null,
+            team_name: l.team?.team_name || l.team_id,
+            leader_name: l.team?.leader_name || 'Leader',
+            college_name: l.team?.college_name || '',
+          }));
+        }
+      }
+    } catch (e) {
+      console.error('getAttendanceLogsAsync error:', e);
+    }
+  }
+
+  const db = getDb();
+  return db.prepare(`
+    SELECT al.*, t.team_name, t.leader_name, t.college_name
+    FROM attendance_logs al
+    LEFT JOIN teams t ON al.team_id = t.id
+    ORDER BY al.check_in_time DESC
+  `).all() as any[];
 }
 
 export async function updateTeamDisqualificationAsync(params: {
@@ -1951,22 +2533,244 @@ export async function updateTeamDisqualificationAsync(params: {
   reason: string;
   performedBy: string;
 }): Promise<void> {
-  updateTeamDisqualification(params);
+  const now = new Date().toISOString();
+  const newStatus = params.disqualify ? 'DISQUALIFIED' : 'CONFIRMED';
+
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseClient();
       if (supabase) {
-        const now = new Date().toISOString();
         await supabase.from('teams').update({
-          registration_status: params.disqualify ? 'DISQUALIFIED' : 'CONFIRMED',
+          registration_status: newStatus,
           disqualification_reason: params.disqualify ? params.reason : null,
           updated_at: now,
         }).eq('id', params.teamId);
+
+        await supabase.from('audit_logs').insert({
+          id: `AUD-${crypto.randomBytes(4).toString('hex')}`,
+          action: params.disqualify ? 'TEAM_DISQUALIFIED' : 'TEAM_REINSTATED',
+          entity_type: 'TEAM',
+          entity_id: params.teamId,
+          performed_by: params.performedBy,
+          details: params.disqualify ? `Disqualified team: ${params.reason}` : 'Reinstated team to confirmed status',
+          timestamp: now,
+        });
+
+        try {
+          const db = getDb();
+          db.prepare(`
+            UPDATE teams SET
+              registration_status = ?,
+              disqualification_reason = ?,
+              updated_at = ?
+            WHERE id = ?
+          `).run(newStatus, params.disqualify ? params.reason : null, now, params.teamId);
+        } catch {}
+
+        return;
       }
     } catch (e) {
       console.error('Supabase updateTeamDisqualificationAsync error:', e);
     }
   }
+
+  updateTeamDisqualification(params);
+}
+
+export async function submitProjectAsync(params: {
+  teamId: string;
+  accessToken: string;
+  projectName: string;
+  problemStatementChosen: string;
+  projectDescription: string;
+  realWorldProblem: string;
+  aiFeatureDescription: string;
+  technologiesUsed: string;
+  repoUrl: string;
+  liveDemoUrl?: string | null;
+  supportingDocUrl?: string | null;
+}): Promise<ProjectSubmission> {
+  const team = await getTeamByIdAsync(params.teamId);
+  if (!team) {
+    throw new Error('Team registration not found.');
+  }
+
+  if (team.access_token !== params.accessToken) {
+    throw new Error('Invalid team access credentials.');
+  }
+
+  if (team.registration_status !== 'CONFIRMED') {
+    throw new Error('Project submission is only allowed for verified and confirmed teams.');
+  }
+
+  const settings = await getSettingsAsync();
+  const deadlineStr = `${settings.event_date}T${settings.submission_deadline}:00+05:30`;
+  const deadline = new Date(deadlineStr).getTime();
+  const nowTime = Date.now();
+  const isLate = nowTime > deadline ? 1 : 0;
+
+  const now = new Date().toISOString();
+  const submissionId = `SUB-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { error: subErr } = await supabase.from('project_submissions').upsert({
+          id: submissionId,
+          team_id: params.teamId,
+          project_name: params.projectName.trim(),
+          problem_statement_chosen: params.problemStatementChosen.trim(),
+          project_description: params.projectDescription.trim(),
+          real_world_problem: params.realWorldProblem.trim(),
+          ai_feature_description: params.aiFeatureDescription.trim(),
+          technologies_used: params.technologiesUsed.trim(),
+          repo_url: params.repoUrl.trim(),
+          live_demo_url: params.liveDemoUrl?.trim() || null,
+          supporting_doc_url: params.supportingDocUrl?.trim() || null,
+          submitted_at: now,
+          is_late: isLate,
+        });
+
+        if (subErr) {
+          console.error('Supabase submitProject error:', subErr);
+          throw new Error(`Failed to save project submission: ${subErr.message}`);
+        }
+
+        await supabase.from('teams').update({
+          submission_status: 'SUBMITTED',
+          updated_at: now,
+        }).eq('id', params.teamId);
+
+        try {
+          const db = getDb();
+          db.prepare(`
+            INSERT OR REPLACE INTO project_submissions (
+              id, team_id, project_name, problem_statement_chosen, project_description,
+              real_world_problem, ai_feature_description, technologies_used,
+              repo_url, live_demo_url, supporting_doc_url, submitted_at, is_late
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            submissionId,
+            params.teamId,
+            params.projectName.trim(),
+            params.problemStatementChosen.trim(),
+            params.projectDescription.trim(),
+            params.realWorldProblem.trim(),
+            params.aiFeatureDescription.trim(),
+            params.technologiesUsed.trim(),
+            params.repoUrl.trim(),
+            params.liveDemoUrl?.trim() || null,
+            params.supportingDocUrl?.trim() || null,
+            now,
+            isLate
+          );
+
+          db.prepare(`
+            UPDATE teams SET
+              submission_status = 'SUBMITTED',
+              updated_at = ?
+            WHERE id = ?
+          `).run(now, params.teamId);
+        } catch {}
+
+        return {
+          id: submissionId,
+          team_id: params.teamId,
+          project_name: params.projectName.trim(),
+          problem_statement_chosen: params.problemStatementChosen.trim(),
+          project_description: params.projectDescription.trim(),
+          real_world_problem: params.realWorldProblem.trim(),
+          ai_feature_description: params.aiFeatureDescription.trim(),
+          technologies_used: params.technologiesUsed.trim(),
+          repo_url: params.repoUrl.trim(),
+          live_demo_url: params.liveDemoUrl?.trim() || null,
+          supporting_doc_url: params.supportingDocUrl?.trim() || null,
+          submitted_at: now,
+          is_late: isLate,
+        };
+      }
+    } catch (e: any) {
+      if (e.message && e.message.includes('Project submission')) {
+        throw e;
+      }
+      console.error('Supabase project submission error:', e);
+    }
+  }
+
+  return submitProject(params);
+}
+
+export async function getAllSubmissionsAsync(): Promise<ProjectSubmission[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data: subs, error } = await supabase
+          .from('project_submissions')
+          .select(`
+            *,
+            team:teams(team_name, leader_name, id)
+          `)
+          .order('submitted_at', { ascending: false });
+
+        if (!error && Array.isArray(subs)) {
+          return subs.map((s: any) => ({
+            id: s.id,
+            team_id: s.team_id,
+            project_name: s.project_name,
+            problem_statement_chosen: s.problem_statement_chosen,
+            project_description: s.project_description,
+            real_world_problem: s.real_world_problem,
+            ai_feature_description: s.ai_feature_description,
+            technologies_used: s.technologies_used,
+            repo_url: s.repo_url,
+            live_demo_url: s.live_demo_url || null,
+            supporting_doc_url: s.supporting_doc_url || null,
+            submitted_at: s.submitted_at,
+            is_late: s.is_late ? 1 : 0,
+            team_name: s.team?.team_name || s.team_id,
+            leader_name: s.team?.leader_name || 'Team Leader',
+          }));
+        }
+      }
+    } catch (e) {
+      console.error('getAllSubmissionsAsync error:', e);
+    }
+  }
+
+  return getAllSubmissions();
+}
+
+export async function getAuditLogsAsync(limit: number = 50): Promise<AuditLog[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('audit_logs')
+          .select('*')
+          .order('timestamp', { ascending: false })
+          .limit(limit);
+
+        if (!error && Array.isArray(data)) {
+          return data.map((a: any) => ({
+            id: a.id,
+            action: a.action,
+            entity_type: a.entity_type,
+            entity_id: a.entity_id,
+            performed_by: a.performed_by,
+            details: a.details,
+            timestamp: a.timestamp,
+          }));
+        }
+      }
+    } catch (e) {
+      console.error('getAuditLogsAsync error:', e);
+    }
+  }
+
+  return getAuditLogs(limit);
 }
 
 export async function getRegistrationStatusHelperAsync(): Promise<{
@@ -1990,7 +2794,7 @@ export async function getRegistrationStatusHelperAsync(): Promise<{
           .select('*', { count: 'exact', head: true });
 
         if (!error && typeof count === 'number') {
-          const settings = getSettings();
+          const settings = await getSettingsAsync();
           const maxStudentCapacity = settings.max_student_capacity || 500;
           const totalStudentsRegistered = count;
           const spotsRemaining = Math.max(0, maxStudentCapacity - totalStudentsRegistered);
